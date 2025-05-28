@@ -68,22 +68,23 @@ public class WebScrapingService {
     
     private static final String XPATH_ADD_TO_BAG = "//*[contains(text(), 'Add to Bag') or contains(text(), 'add to bag')]";
     
-    @PostConstruct
+    // @PostConstruct  // 暂时禁用自动初始化
     public void initializeDriverPool() {
-        logger.info("Initializing WebDriver pool with {} drivers", MAX_DRIVERS);
+        logger.info("WebDriver pool initialization temporarily disabled");
+        // logger.info("Initializing WebDriver pool with {} drivers", MAX_DRIVERS);
         
         // 预创建WebDriver实例
-        for (int i = 0; i < MAX_DRIVERS; i++) {
-            try {
-                WebDriver driver = createWebDriver();
-                driverPool.offer(driver);
-                logger.debug("Created WebDriver instance {}/{}", i + 1, MAX_DRIVERS);
-            } catch (Exception e) {
-                logger.error("Failed to create WebDriver instance {}: {}", i + 1, e.getMessage());
-            }
-        }
+        // for (int i = 0; i < MAX_DRIVERS; i++) {
+        //     try {
+        //         WebDriver driver = createWebDriver();
+        //         driverPool.offer(driver);
+        //         logger.debug("Created WebDriver instance {}/{}", i + 1, MAX_DRIVERS);
+        //     } catch (Exception e) {
+        //         logger.error("Failed to create WebDriver instance {}: {}", i + 1, e.getMessage());
+        //     }
+        // }
         
-        logger.info("WebDriver pool initialized with {} drivers", driverPool.size());
+        // logger.info("WebDriver pool initialized with {} drivers", driverPool.size());
     }
     
     private WebDriver createWebDriver() {
