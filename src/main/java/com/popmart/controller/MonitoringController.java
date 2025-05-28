@@ -55,7 +55,7 @@ public class MonitoringController {
     }
     
     @DeleteMapping("/products/{productId}")
-    public ResponseEntity<ApiResponse<String>> removeProduct(@PathVariable Long productId, @RequestParam String userId) {
+    public ResponseEntity<ApiResponse<String>> removeProduct(@PathVariable String productId, @RequestParam String userId) {
         try {
             monitoringService.removeProduct(productId, userId);
             return ResponseEntity.ok(ApiResponse.success("商品移除成功", "Product removed successfully"));
@@ -65,7 +65,7 @@ public class MonitoringController {
     }
     
     @PostMapping("/products/{productId}/check")
-    public ResponseEntity<ApiResponse<StockCheckHistory>> checkProductStock(@PathVariable Long productId, @RequestParam String userId) {
+    public ResponseEntity<ApiResponse<StockCheckHistory>> checkProductStock(@PathVariable String productId, @RequestParam String userId) {
         try {
             StockCheckHistory result = monitoringService.checkProductById(productId, userId);
             return ResponseEntity.ok(ApiResponse.success("库存检查完成", result));

@@ -89,44 +89,66 @@ public class WebScrapingService {
     
     private WebDriver createWebDriver() {
         try {
-            // 设置 ChromeDriver 路径
+            logger.info("Creating WebDriver with Docker-optimized configuration");
+            
+            // 检测是否在 Docker 环境中
+            boolean isDocker = isRunningInDocker();
+            logger.info("Running in Docker environment: {}", isDocker);
+            
+            // 设置 WebDriverManager
             WebDriverManager.chromedriver().setup();
             
             ChromeOptions options = new ChromeOptions();
             
-            if (config.getMonitor().getSelenium().isHeadless()) {
-                // 使用 headless 模式
-                options.addArguments("--headless");
+            // Docker 环境必需的基础配置
+            if (isDocker) {
+                options.addArguments("--no-sandbox");
+                options.addArguments("--disable-dev-shm-usage");
+                options.addArguments("--disable-gpu");
+                options.addArguments("--remote-debugging-port=9222");
+                options.addArguments("--disable-features=VizDisplayCompositor");
+                options.addArguments("--disable-extensions-file-access-check");
+                options.addArguments("--disable-extensions-http-throttling");
+                options.addArguments("--disable-ipc-flooding-protection");
+                logger.info("Applied Docker-specific Chrome options");
             }
             
-            // 轻量化优化参数
-            options.addArguments("--no-sandbox");
-            options.addArguments("--disable-dev-shm-usage");
-            options.addArguments("--disable-gpu");
-            options.addArguments("--disable-extensions");
-            options.addArguments("--disable-plugins");
-            options.addArguments("--disable-software-rasterizer");
+            // 通用 headless 配置
+            options.addArguments("--headless=new");
+            options.addArguments("--disable-web-security");
+            options.addArguments("--allow-running-insecure-content");
+            options.addArguments("--ignore-certificate-errors");
+            options.addArguments("--ignore-ssl-errors");
+            options.addArguments("--ignore-certificate-errors-spki-list");
             options.addArguments("--disable-background-timer-throttling");
             options.addArguments("--disable-backgrounding-occluded-windows");
             options.addArguments("--disable-renderer-backgrounding");
-            options.addArguments("--disable-features=TranslateUI,VizDisplayCompositor");
-            options.addArguments("--disable-ipc-flooding-protection");
+            
+            // 性能优化配置
+            options.addArguments("--blink-settings=imagesEnabled=false");
+            options.addArguments("--disable-javascript");
+            options.addArguments("--disable-plugins");
+            options.addArguments("--disable-images");
+            options.addArguments("--disable-background-networking");
             options.addArguments("--disable-default-apps");
             options.addArguments("--disable-sync");
-            options.addArguments("--disable-background-networking");
-            options.addArguments("--disable-component-extensions-with-background-pages");
-            options.addArguments("--disable-client-side-phishing-detection");
-            options.addArguments("--disable-hang-monitor");
-            options.addArguments("--disable-prompt-on-repost");
-            options.addArguments("--disable-domain-reliability");
-            options.addArguments("--disable-features=AudioServiceOutOfProcess");
+            options.addArguments("--disable-translate");
+            options.addArguments("--hide-scrollbars");
+            options.addArguments("--metrics-recording-only");
+            options.addArguments("--mute-audio");
+            options.addArguments("--no-first-run");
+            options.addArguments("--safebrowsing-disable-auto-update");
+            options.addArguments("--disable-logging");
+            options.addArguments("--disable-permissions-api");
+            options.addArguments("--disable-presentation-api");
+            options.addArguments("--disable-print-preview");
+            options.addArguments("--disable-speech-api");
+            options.addArguments("--disable-file-system");
+            options.addArguments("--disable-notification-permission-ui");
+            options.addArguments("--disable-offer-store-unmasked-wallet-cards");
+            options.addArguments("--disable-offer-upload-credit-cards");
             
-            // 禁用图片和媒体加载（大幅减少带宽和加载时间）
-            options.addArguments("--blink-settings=imagesEnabled=false");
-            options.addArguments("--disable-images");
-            // 注意：不能禁用JavaScript，因为我们需要执行检测脚本
-            
-            // 内存和性能优化
+            // 内存优化
             options.addArguments("--memory-pressure-off");
             options.addArguments("--max_old_space_size=4096");
             options.addArguments("--aggressive-cache-discard");
@@ -140,12 +162,38 @@ public class WebScrapingService {
             options.addArguments("--window-size=800,600");
             options.addArguments("--user-agent=" + config.getMonitor().getSelenium().getUserAgent());
             options.addArguments("--disable-blink-features=AutomationControlled");
-            options.addArguments("--disable-web-security");
-            options.addArguments("--allow-running-insecure-content");
             
             // 实验性优化
             options.setExperimentalOption("useAutomationExtension", false);
             options.setExperimentalOption("excludeSwitches", new String[]{"enable-automation", "enable-logging"});
+            
+            // 设置 Chrome 二进制路径（Docker 环境）
+            if (isDocker) {
+                String chromeBinary = System.getenv("CHROME_BIN");
+                if (chromeBinary == null || chromeBinary.isEmpty()) {
+                    // 尝试常见的 Chrome 路径
+                    String[] possiblePaths = {
+                        "/usr/bin/chromium-browser",
+                        "/usr/bin/chromium",
+                        "/usr/bin/google-chrome",
+                        "/usr/bin/google-chrome-stable"
+                    };
+                    
+                    for (String path : possiblePaths) {
+                        if (new java.io.File(path).exists()) {
+                            chromeBinary = path;
+                            break;
+                        }
+                    }
+                }
+                
+                if (chromeBinary != null && !chromeBinary.isEmpty()) {
+                    options.setBinary(chromeBinary);
+                    logger.info("Using Chrome binary: {}", chromeBinary);
+                } else {
+                    logger.warn("Chrome binary not found, using default");
+                }
+            }
             
             // 使用配置的超时时间
             WebDriver driver = new ChromeDriver(options);
@@ -153,11 +201,43 @@ public class WebScrapingService {
             driver.manage().timeouts().pageLoadTimeout(Duration.ofSeconds(config.getMonitor().getSelenium().getPerformance().getPageLoadTimeout()));
             driver.manage().timeouts().scriptTimeout(Duration.ofSeconds(config.getMonitor().getSelenium().getPerformance().getScriptTimeout()));
             
-            logger.info("WebDriver initialized successfully with lightweight optimizations");
+            logger.info("WebDriver initialized successfully with Docker-optimized configuration");
             return driver;
         } catch (Exception e) {
-            logger.error("Failed to initialize WebDriver", e);
-            throw new RuntimeException("Failed to initialize WebDriver", e);
+            logger.error("Failed to initialize WebDriver: {}", e.getMessage(), e);
+            throw new RuntimeException("Failed to initialize WebDriver: " + e.getMessage(), e);
+        }
+    }
+    
+    /**
+     * 检测是否在 Docker 环境中运行
+     */
+    private boolean isRunningInDocker() {
+        try {
+            // 方法1: 检查 /.dockerenv 文件
+            if (new java.io.File("/.dockerenv").exists()) {
+                return true;
+            }
+            
+            // 方法2: 检查 /proc/1/cgroup
+            java.nio.file.Path cgroupPath = java.nio.file.Paths.get("/proc/1/cgroup");
+            if (java.nio.file.Files.exists(cgroupPath)) {
+                String content = new String(java.nio.file.Files.readAllBytes(cgroupPath));
+                if (content.contains("docker") || content.contains("containerd")) {
+                    return true;
+                }
+            }
+            
+            // 方法3: 检查环境变量
+            String containerEnv = System.getenv("container");
+            if ("docker".equals(containerEnv)) {
+                return true;
+            }
+            
+            return false;
+        } catch (Exception e) {
+            logger.debug("Error detecting Docker environment: {}", e.getMessage());
+            return false;
         }
     }
     

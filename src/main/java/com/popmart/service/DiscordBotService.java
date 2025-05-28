@@ -156,18 +156,18 @@ public class DiscordBotService extends ListenerAdapter {
         if (buttonId.startsWith("check_now_")) {
             String productIdStr = buttonId.substring("check_now_".length());
             try {
-                Long productId = Long.parseLong(productIdStr);
+                String productId = productIdStr; // 直接使用字符串，不需要解析为Long
                 handleCheckNow(event, productId, userId);
-            } catch (NumberFormatException e) {
-                event.reply("Invalid product ID").setEphemeral(true).queue();
+            } catch (Exception e) {
+                event.reply("❌ Invalid product ID").setEphemeral(true).queue();
             }
         } else if (buttonId.startsWith("stop_monitoring_")) {
             String productIdStr = buttonId.substring("stop_monitoring_".length());
             try {
-                Long productId = Long.parseLong(productIdStr);
+                String productId = productIdStr; // 直接使用字符串，不需要解析为Long
                 handleStopMonitoring(event, productId, userId);
-            } catch (NumberFormatException e) {
-                event.reply("Invalid product ID").setEphemeral(true).queue();
+            } catch (Exception e) {
+                event.reply("❌ Invalid product ID").setEphemeral(true).queue();
             }
         }
     }
@@ -206,6 +206,7 @@ public class DiscordBotService extends ListenerAdapter {
                     .setTitle("✅ Product Added to Monitoring")
                     .setDescription("Successfully added product to monitoring list")
                     .addField("Product Name", product.getProductName(), false)
+                    .addField("Product ID", product.getProductId(), true)
                     .addField("URL", product.getUrl(), false)
                     .addField("Status", product.getLastKnownStock() ? "🟢 In Stock" : "🔴 Out of Stock", false)
                     .setColor(Color.GREEN)
@@ -213,12 +214,23 @@ public class DiscordBotService extends ListenerAdapter {
                 
                 event.getHook().editOriginalEmbeds(embed.build())
                     .setActionRow(
-                        Button.primary("check_now_" + product.getId(), "Check Now"),
-                        Button.danger("stop_monitoring_" + product.getId(), "Stop Monitoring")
+                        Button.primary("check_now_" + product.getProductId(), "Check Now"),
+                        Button.danger("stop_monitoring_" + product.getProductId(), "Stop Monitoring")
                     )
                     .queue();
             }).exceptionally(throwable -> {
-                event.getHook().editOriginal("❌ Error: " + throwable.getCause().getMessage()).queue();
+                String errorMessage = "添加商品失败，请检查URL是否正确或稍后重试";
+                if (throwable.getCause() != null && throwable.getCause().getMessage() != null) {
+                    String causeMessage = throwable.getCause().getMessage();
+                    if (causeMessage.contains("already being monitored")) {
+                        errorMessage = "该商品已在监控列表中";
+                    } else if (causeMessage.contains("Invalid Pop Mart URL")) {
+                        errorMessage = "无效的 Pop Mart 商品链接，请确保链接格式正确";
+                    } else if (causeMessage.contains("无法从URL中提取商品ID")) {
+                        errorMessage = "无法识别商品ID，请检查链接是否为有效的 Pop Mart 商品页面";
+                    }
+                }
+                event.getHook().editOriginal("❌ " + errorMessage).queue();
                 return null;
             });
         }, failure -> {
@@ -243,7 +255,15 @@ public class DiscordBotService extends ListenerAdapter {
             event.replyEmbeds(embed.build()).queue();
             
         } catch (Exception e) {
-            event.reply("❌ Error: " + e.getMessage()).setEphemeral(true).queue();
+            String errorMessage = "移除商品失败";
+            if (e.getMessage() != null) {
+                if (e.getMessage().contains("Product not found")) {
+                    errorMessage = "未找到该商品，可能已被移除或URL不正确";
+                } else if (e.getMessage().contains("You can only remove products you added")) {
+                    errorMessage = "您只能移除自己添加的商品";
+                }
+            }
+            event.reply("❌ " + errorMessage).setEphemeral(true).queue();
         }
     }
     
@@ -270,8 +290,8 @@ public class DiscordBotService extends ListenerAdapter {
             
             embed.addField(
                 product.getProductName(),
-                String.format("Status: %s\nLast Checked: %s\n[View Product](%s)", 
-                    status, lastChecked, product.getUrl()),
+                String.format("Product ID: %s\nStatus: %s\nLast Checked: %s\n[View Product](%s)", 
+                    product.getProductId(), status, lastChecked, product.getUrl()),
                 false
             );
         }
@@ -316,7 +336,18 @@ public class DiscordBotService extends ListenerAdapter {
                 
                 event.getHook().editOriginalEmbeds(embed.build()).queue();
             }).exceptionally(throwable -> {
-                event.getHook().editOriginal("❌ Error testing URL: " + throwable.getCause().getMessage()).queue();
+                String errorMessage = "测试失败，请检查URL是否正确或稍后重试";
+                if (throwable.getCause() != null && throwable.getCause().getMessage() != null) {
+                    String causeMessage = throwable.getCause().getMessage();
+                    if (causeMessage.contains("Invalid Pop Mart URL")) {
+                        errorMessage = "无效的 Pop Mart 商品链接";
+                    } else if (causeMessage.contains("timeout") || causeMessage.contains("TimeoutException")) {
+                        errorMessage = "请求超时，请稍后重试";
+                    } else if (causeMessage.contains("WebDriverException")) {
+                        errorMessage = "网页加载失败，请稍后重试";
+                    }
+                }
+                event.getHook().editOriginal("❌ " + errorMessage).queue();
                 return null;
             });
         }, failure -> {
@@ -348,7 +379,7 @@ public class DiscordBotService extends ListenerAdapter {
         event.replyEmbeds(embed.build()).queue();
     }
     
-    private void handleCheckNow(ButtonInteractionEvent event, Long productId, String userId) {
+    private void handleCheckNow(ButtonInteractionEvent event, String productId, String userId) {
         event.deferReply(true).queue(success -> {
             // Send initial response after deferReply succeeds
             event.getHook().editOriginal("⏳ Checking product stock... Please wait.").queue();
@@ -371,7 +402,20 @@ public class DiscordBotService extends ListenerAdapter {
                     event.getHook().editOriginal("❌ Product not found or access denied").queue();
                 }
             }).exceptionally(throwable -> {
-                event.getHook().editOriginal("❌ Error: " + throwable.getCause().getMessage()).queue();
+                String errorMessage = "检查失败，请稍后重试";
+                if (throwable.getCause() != null && throwable.getCause().getMessage() != null) {
+                    String causeMessage = throwable.getCause().getMessage();
+                    if (causeMessage.contains("Product not found")) {
+                        errorMessage = "商品未找到";
+                    } else if (causeMessage.contains("You can only check products you added")) {
+                        errorMessage = "您只能检查自己添加的商品";
+                    } else if (causeMessage.contains("Product is not active")) {
+                        errorMessage = "商品监控已停用";
+                    } else if (causeMessage.contains("timeout") || causeMessage.contains("TimeoutException")) {
+                        errorMessage = "请求超时，请稍后重试";
+                    }
+                }
+                event.getHook().editOriginal("❌ " + errorMessage).queue();
                 return null;
             });
         }, failure -> {
@@ -380,12 +424,20 @@ public class DiscordBotService extends ListenerAdapter {
         });
     }
     
-    private void handleStopMonitoring(ButtonInteractionEvent event, Long productId, String userId) {
+    private void handleStopMonitoring(ButtonInteractionEvent event, String productId, String userId) {
         try {
             monitoringService.removeProduct(productId, userId);
             event.reply("✅ Stopped monitoring this product").setEphemeral(true).queue();
         } catch (Exception e) {
-            event.reply("❌ Error: " + e.getMessage()).setEphemeral(true).queue();
+            String errorMessage = "停止监控失败";
+            if (e.getMessage() != null) {
+                if (e.getMessage().contains("Product not found")) {
+                    errorMessage = "商品未找到";
+                } else if (e.getMessage().contains("You can only remove products you added")) {
+                    errorMessage = "您只能停止监控自己添加的商品";
+                }
+            }
+            event.reply("❌ " + errorMessage).setEphemeral(true).queue();
         }
     }
 } 

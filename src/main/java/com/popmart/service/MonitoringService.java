@@ -403,7 +403,7 @@ public class MonitoringService {
     }
     
     @Transactional
-    public void removeProduct(Long productId, String userId) {
+    public void removeProduct(String productId, String userId) {
         Optional<MonitoredProduct> productOpt = productRepository.findByProductId(productId);
 
         if (!productOpt.isPresent()) {
@@ -453,7 +453,7 @@ public class MonitoringService {
      * Used for Discord bot manual check functionality
      */
     @Transactional
-    public StockCheckHistory checkProductById(Long productId, String userId) {
+    public StockCheckHistory checkProductById(String productId, String userId) {
         Optional<MonitoredProduct> productOpt = productRepository.findByProductId(productId);
         if (!productOpt.isPresent()) {
             throw new IllegalArgumentException("Product not found");

@@ -34,5 +34,5 @@ public interface MonitoredProductRepository extends BaseMapper<MonitoredProduct>
     long countInStockProducts();
 
     @Select("SELECT * FROM monitored_products WHERE product_id = #{productId} AND deleted = 0")
-    Optional<MonitoredProduct> findByProductId(@Param("productId") Long productId);
+    Optional<MonitoredProduct> findByProductId(@Param("productId") String productId);
 } 
