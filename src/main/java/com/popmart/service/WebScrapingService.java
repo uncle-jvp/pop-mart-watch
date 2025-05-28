@@ -113,29 +113,44 @@ public class WebScrapingService {
             
             // Docker 环境必需的基础配置
             if (isDocker) {
+                String chromeBinary = "/usr/bin/chromium-browser"; // Alpine Linux中的Chromium路径
+                if (new java.io.File(chromeBinary).exists()) {
+                    options.setBinary(chromeBinary);
+                    logger.info("Using Chromium binary: {}", chromeBinary);
+                } else {
+                    logger.error("Chromium binary not found at {}", chromeBinary);
+                    throw new RuntimeException("Chromium binary not found. Please ensure Chromium is installed.");
+                }
+
+                // Alpine Linux的Chromium特定配置
                 options.addArguments("--no-sandbox");
                 options.addArguments("--disable-dev-shm-usage");
                 options.addArguments("--disable-gpu");
                 options.addArguments("--remote-debugging-port=9222");
-                options.addArguments("--disable-features=VizDisplayCompositor");
-                options.addArguments("--disable-extensions");
+                options.addArguments("--headless=new");
                 options.addArguments("--disable-software-rasterizer");
                 options.addArguments("--disable-setuid-sandbox");
-                options.addArguments("--single-process");
-                options.addArguments("--no-zygote");
+                options.addArguments("--disable-extensions");
                 options.addArguments("--disable-infobars");
                 options.addArguments("--disable-notifications");
-                options.addArguments("--disable-popup-blocking");
-                options.addArguments("--disable-save-password-bubble");
-                options.addArguments("--disable-site-isolation-trials");
-                options.addArguments("--disable-web-security");
+                options.addArguments("--window-size=1920,1080");
                 options.addArguments("--ignore-certificate-errors");
-                options.addArguments("--ignore-ssl-errors");
+                options.addArguments("--disable-web-security");
                 options.addArguments("--allow-running-insecure-content");
                 options.addArguments("--disable-blink-features=AutomationControlled");
-                options.addArguments("--window-size=1920,1080");  // 使用更大的窗口尺寸
-                options.addArguments("--start-maximized");
-                logger.info("Applied Docker-specific Chrome options");
+                
+                // Alpine特定的内存和进程配置
+                options.addArguments("--disable-dev-tools");
+                options.addArguments("--disable-features=site-per-process");
+                options.addArguments("--disable-accelerated-2d-canvas");
+                options.addArguments("--disable-accelerated-jpeg-decoding");
+                options.addArguments("--disable-accelerated-mjpeg-decode");
+                options.addArguments("--disable-accelerated-video-decode");
+                options.addArguments("--disable-gpu-compositing");
+                options.addArguments("--memory-pressure-off");
+                options.addArguments("--disable-background-networking");
+                
+                logger.info("Applied Alpine-specific Chromium options");
             }
             
             // 通用 headless 配置
@@ -190,18 +205,6 @@ public class WebScrapingService {
             // 实验性优化
             options.setExperimentalOption("useAutomationExtension", false);
             options.setExperimentalOption("excludeSwitches", new String[]{"enable-automation", "enable-logging"});
-            
-            // 设置 Chrome 二进制路径（Docker 环境）
-            if (isDocker) {
-                String chromeBinary = "/usr/bin/google-chrome"; // 直接使用已知的Google Chrome路径
-                if (new java.io.File(chromeBinary).exists()) {
-                    options.setBinary(chromeBinary);
-                    logger.info("Using Chrome binary: {}", chromeBinary);
-                } else {
-                    logger.error("Chrome binary not found at {}", chromeBinary);
-                    throw new RuntimeException("Chrome binary not found. Please ensure Google Chrome is installed.");
-                }
-            }
             
             // 使用配置的超时时间
             WebDriver driver = new ChromeDriver(options);
