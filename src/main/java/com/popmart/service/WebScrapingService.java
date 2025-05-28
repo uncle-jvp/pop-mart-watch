@@ -126,7 +126,7 @@ public class WebScrapingService {
     
     private WebDriver createWebDriver() {
         try {
-            logger.info("Creating WebDriver with Docker-optimized configuration");
+            logger.info("Creating WebDriver with optimized configuration");
             
             // 检测是否在 Docker 环境中
             boolean isDocker = isRunningInDocker();
@@ -140,9 +140,48 @@ public class WebScrapingService {
             
             ChromeOptions options = new ChromeOptions();
             
-            // Docker 环境必需的基础配置
+            // 基础配置
+            options.addArguments("--headless=new");
+            options.addArguments("--no-sandbox");
+            options.addArguments("--disable-dev-shm-usage");
+            options.addArguments("--disable-gpu");
+            
+            // 性能优化配置
+            options.addArguments("--disable-extensions");
+            options.addArguments("--disable-plugins");
+            options.addArguments("--disable-images");
+            options.addArguments("--disable-javascript");
+            options.addArguments("--blink-settings=imagesEnabled=false");
+            options.addArguments("--disable-default-apps");
+            options.addArguments("--disable-sync");
+            options.addArguments("--disable-translate");
+            
+            // 内存优化
+            options.addArguments("--memory-pressure-off");
+            options.addArguments("--disable-background-networking");
+            options.addArguments("--disable-background-timer-throttling");
+            options.addArguments("--disable-backgrounding-occluded-windows");
+            
+            // 安全配置
+            options.addArguments("--disable-web-security");
+            options.addArguments("--allow-running-insecure-content");
+            options.addArguments("--ignore-certificate-errors");
+            
+            // 窗口配置
+            options.addArguments("--window-size=1920,1080");
+            options.addArguments("--hide-scrollbars");
+            
+            // 禁用自动化检测
+            options.addArguments("--disable-blink-features=AutomationControlled");
+            options.setExperimentalOption("useAutomationExtension", false);
+            options.setExperimentalOption("excludeSwitches", new String[]{"enable-automation", "enable-logging"});
+            
+            // 设置用户代理
+            options.addArguments("--user-agent=" + config.getMonitor().getSelenium().getUserAgent());
+            
+            // Docker环境特定配置
             if (isDocker) {
-                String chromeBinary = "/usr/bin/chromium-browser"; // Alpine Linux中的Chromium路径
+                String chromeBinary = "/usr/bin/chromium-browser";
                 if (new java.io.File(chromeBinary).exists()) {
                     options.setBinary(chromeBinary);
                     logger.info("Using Chromium binary: {}", chromeBinary);
@@ -150,99 +189,19 @@ public class WebScrapingService {
                     logger.error("Chromium binary not found at {}", chromeBinary);
                     throw new RuntimeException("Chromium binary not found. Please ensure Chromium is installed.");
                 }
-
-                // Alpine Linux的Chromium特定配置
-                options.addArguments("--no-sandbox");
-                options.addArguments("--disable-dev-shm-usage");
-                options.addArguments("--disable-gpu");
-                options.addArguments("--remote-debugging-port=9222");
-                options.addArguments("--headless=new");
-                options.addArguments("--disable-software-rasterizer");
-                options.addArguments("--disable-setuid-sandbox");
-                options.addArguments("--disable-extensions");
-                options.addArguments("--disable-infobars");
-                options.addArguments("--disable-notifications");
-                options.addArguments("--window-size=1920,1080");
-                options.addArguments("--ignore-certificate-errors");
-                options.addArguments("--disable-web-security");
-                options.addArguments("--allow-running-insecure-content");
-                options.addArguments("--disable-blink-features=AutomationControlled");
-                
-                // Alpine特定的内存和进程配置
-                options.addArguments("--disable-dev-tools");
-                options.addArguments("--disable-features=site-per-process");
-                options.addArguments("--disable-accelerated-2d-canvas");
-                options.addArguments("--disable-accelerated-jpeg-decoding");
-                options.addArguments("--disable-accelerated-mjpeg-decode");
-                options.addArguments("--disable-accelerated-video-decode");
-                options.addArguments("--disable-gpu-compositing");
-                options.addArguments("--memory-pressure-off");
-                options.addArguments("--disable-background-networking");
-                
-                logger.info("Applied Alpine-specific Chromium options");
             }
             
-            // 通用 headless 配置
-            options.addArguments("--headless=new");
-            options.addArguments("--disable-web-security");
-            options.addArguments("--allow-running-insecure-content");
-            options.addArguments("--ignore-certificate-errors");
-            options.addArguments("--ignore-ssl-errors");
-            options.addArguments("--ignore-certificate-errors-spki-list");
-            options.addArguments("--disable-background-timer-throttling");
-            options.addArguments("--disable-backgrounding-occluded-windows");
-            options.addArguments("--disable-renderer-backgrounding");
-            
-            // 性能优化配置
-            options.addArguments("--blink-settings=imagesEnabled=false");
-            options.addArguments("--disable-plugins");
-            options.addArguments("--disable-images");
-            options.addArguments("--disable-background-networking");
-            options.addArguments("--disable-default-apps");
-            options.addArguments("--disable-sync");
-            options.addArguments("--disable-translate");
-            options.addArguments("--hide-scrollbars");
-            options.addArguments("--metrics-recording-only");
-            options.addArguments("--mute-audio");
-            options.addArguments("--no-first-run");
-            options.addArguments("--safebrowsing-disable-auto-update");
-            options.addArguments("--disable-logging");
-            options.addArguments("--disable-permissions-api");
-            options.addArguments("--disable-presentation-api");
-            options.addArguments("--disable-print-preview");
-            options.addArguments("--disable-speech-api");
-            options.addArguments("--disable-file-system");
-            options.addArguments("--disable-notification-permission-ui");
-            options.addArguments("--disable-offer-store-unmasked-wallet-cards");
-            options.addArguments("--disable-offer-upload-credit-cards");
-            
-            // 内存优化
-            options.addArguments("--memory-pressure-off");
-            options.addArguments("--max_old_space_size=4096");
-            options.addArguments("--aggressive-cache-discard");
-            
-            // 网络优化
-            options.addArguments("--disable-background-networking");
-            options.addArguments("--disable-default-apps");
-            options.addArguments("--disable-extensions");
-            
-            // 窗口尺寸优化（更小的窗口）
-            options.addArguments("--window-size=800,600");
-            options.addArguments("--user-agent=" + config.getMonitor().getSelenium().getUserAgent());
-            options.addArguments("--disable-blink-features=AutomationControlled");
-            
-            // 实验性优化
-            options.setExperimentalOption("useAutomationExtension", false);
-            options.setExperimentalOption("excludeSwitches", new String[]{"enable-automation", "enable-logging"});
-            
-            // 使用配置的超时时间
+            // 创建WebDriver实例
             WebDriver driver = new ChromeDriver(options);
-            driver.manage().timeouts().implicitlyWait(Duration.ofSeconds(config.getMonitor().getSelenium().getPerformance().getImplicitWait()));
-            driver.manage().timeouts().pageLoadTimeout(Duration.ofSeconds(config.getMonitor().getSelenium().getPerformance().getPageLoadTimeout()));
-            driver.manage().timeouts().scriptTimeout(Duration.ofSeconds(config.getMonitor().getSelenium().getPerformance().getScriptTimeout()));
             
-            logger.info("WebDriver initialized successfully with Docker-optimized configuration");
+            // 设置超时
+            driver.manage().timeouts().pageLoadTimeout(Duration.ofSeconds(10));
+            driver.manage().timeouts().scriptTimeout(Duration.ofSeconds(5));
+            driver.manage().timeouts().implicitlyWait(Duration.ofSeconds(3));
+            
+            logger.info("WebDriver initialized successfully with optimized configuration");
             return driver;
+            
         } catch (Exception e) {
             logger.error("Failed to initialize WebDriver: {}", e.getMessage(), e);
             throw new RuntimeException("Failed to initialize WebDriver: " + e.getMessage(), e);
