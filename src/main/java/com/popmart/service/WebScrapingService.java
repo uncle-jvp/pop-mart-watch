@@ -25,6 +25,11 @@ import java.net.URL;
 import java.util.List;
 import java.util.concurrent.*;
 import java.time.Duration;
+import java.util.ArrayList;
+import java.util.concurrent.CompletableFuture;
+import com.google.common.cache.CacheBuilder;
+import com.google.common.cache.CacheLoader;
+import com.google.common.cache.LoadingCache;
 
 /**
  * Web scraping service for checking Pop Mart product stock
@@ -46,17 +51,32 @@ public class WebScrapingService {
     @Autowired
     private PopMartConfig config;
     
-    // WebDriver池管理
-    private final BlockingQueue<WebDriver> driverPool = new LinkedBlockingQueue<>();
-    private final int MAX_DRIVERS = 3; // 最多同时运行3个浏览器实例
+    // WebDriver池管理 - 增加池大小和超时设置
+    private final int MAX_DRIVERS = 5; // 增加到5个并发实例
+    private final BlockingQueue<WebDriver> driverPool = new LinkedBlockingQueue<>(MAX_DRIVERS);
     private final ExecutorService executorService = Executors.newFixedThreadPool(MAX_DRIVERS);
     private final Semaphore driverSemaphore = new Semaphore(MAX_DRIVERS);
     
-    // 缓存页面基本信息，避免重复检测
-    private final ConcurrentHashMap<String, PageInfo> pageCache = new ConcurrentHashMap<>();
-    
-    // 缓存HTTP连接状态
-    private final ConcurrentHashMap<String, Boolean> connectivityCache = new ConcurrentHashMap<>();
+    // 优化缓存策略
+    private final LoadingCache<String, PageInfo> pageCache = CacheBuilder.newBuilder()
+        .maximumSize(100)
+        .expireAfterWrite(30, TimeUnit.SECONDS)
+        .build(new CacheLoader<String, PageInfo>() {
+            @Override
+            public PageInfo load(String key) {
+                return null; // 强制重新加载
+            }
+        });
+        
+    private final LoadingCache<String, Boolean> connectivityCache = CacheBuilder.newBuilder()
+        .maximumSize(100)
+        .expireAfterWrite(60, TimeUnit.SECONDS)
+        .build(new CacheLoader<String, Boolean>() {
+            @Override
+            public Boolean load(String key) {
+                return checkUrlConnectivity(key);
+            }
+        });
     
     // 预编译的CSS选择器和XPath（提高匹配效率）
     private static final String[] BUTTON_SELECTORS = {
@@ -69,30 +89,39 @@ public class WebScrapingService {
     
     private static final String XPATH_ADD_TO_BAG = "//*[contains(text(), 'Add to Bag') or contains(text(), 'add to bag')]";
     
-    @PostConstruct  // 重新启用自动初始化
+    @PostConstruct
+    public void initializeService() {
+        // 预热WebDriver池
+        initializeDriverPool();
+    }
+    
+    @PostConstruct
     public void initializeDriverPool() {
         logger.info("Initializing WebDriver pool with {} drivers", MAX_DRIVERS);
         
-        int successfulDrivers = 0;
-        // 预创建WebDriver实例
+        // 并发初始化WebDriver实例
+        List<CompletableFuture<Void>> futures = new ArrayList<>();
         for (int i = 0; i < MAX_DRIVERS; i++) {
-            try {
-                WebDriver driver = createWebDriver();
-                driverPool.offer(driver);
-                successfulDrivers++;
-                logger.debug("Created WebDriver instance {}/{}", i + 1, MAX_DRIVERS);
-            } catch (Exception e) {
-                logger.error("Failed to create WebDriver instance {}: {}", i + 1, e.getMessage());
-            }
+            futures.add(CompletableFuture.runAsync(() -> {
+                try {
+                    WebDriver driver = createWebDriver();
+                    driverPool.offer(driver);
+                    logger.debug("Created and added WebDriver to pool");
+                } catch (Exception e) {
+                    logger.error("Failed to create WebDriver instance: {}", e.getMessage());
+                }
+            }));
         }
         
-        logger.info("WebDriver pool initialized with {}/{} drivers", successfulDrivers, MAX_DRIVERS);
-        
-        // 确保至少有一个可用的 WebDriver
-        if (successfulDrivers == 0) {
-            logger.error("Failed to create any WebDriver instances during initialization");
-            // 不抛出异常，而是在运行时按需创建
-        }
+        // 等待所有初始化完成
+        CompletableFuture.allOf(futures.toArray(new CompletableFuture[0]))
+            .exceptionally(throwable -> {
+                logger.error("Error during pool initialization: {}", throwable.getMessage());
+                return null;
+            })
+            .join();
+            
+        logger.info("WebDriver pool initialized with {} drivers", driverPool.size());
     }
     
     private WebDriver createWebDriver() {
@@ -252,41 +281,31 @@ public class WebScrapingService {
         }
     }
     
-    /**
-     * 从池中获取WebDriver实例
-     */
     private WebDriver borrowDriver() throws InterruptedException {
-        driverSemaphore.acquire(); // 获取许可
+        if (!driverSemaphore.tryAcquire(5, TimeUnit.SECONDS)) {
+            throw new RuntimeException("无法获取可用的WebDriver实例，请稍后重试");
+        }
         
         try {
-            // 增加超时时间到 15 秒，适应 Docker 环境
-            WebDriver driver = driverPool.poll(15, TimeUnit.SECONDS);
-            
+            WebDriver driver = driverPool.poll(5, TimeUnit.SECONDS);
             if (driver == null) {
-                logger.warn("No driver available from pool, creating new one");
+                logger.warn("无可用WebDriver，创建新实例");
                 try {
                     driver = createWebDriver();
-                    logger.info("Successfully created new WebDriver instance");
                 } catch (Exception e) {
-                    logger.error("Failed to create new WebDriver: {}", e.getMessage());
-                    throw new RuntimeException("Failed to get WebDriver from pool and unable to create new one: " + e.getMessage());
+                    throw new RuntimeException("创建WebDriver失败: " + e.getMessage());
                 }
             } else {
-                // 检查driver是否还活着
                 try {
                     driver.getCurrentUrl();
-                    logger.debug("Retrieved healthy WebDriver from pool");
                 } catch (Exception e) {
-                    logger.warn("Driver from pool is dead, creating new one");
+                    logger.warn("WebDriver实例已失效，创建新实例");
                     try {
                         driver.quit();
                     } catch (Exception ignored) {}
-                    
                     driver = createWebDriver();
-                    logger.info("Successfully replaced dead WebDriver with new instance");
                 }
             }
-            
             return driver;
         } catch (Exception e) {
             driverSemaphore.release();
@@ -294,30 +313,22 @@ public class WebScrapingService {
         }
     }
     
-    /**
-     * 将WebDriver实例归还到池中
-     */
     private void returnDriver(WebDriver driver) {
         if (driver != null) {
             try {
-                // 清理driver状态
                 driver.manage().deleteAllCookies();
-                
-                // 归还到池中
                 if (!driverPool.offer(driver)) {
-                    logger.warn("Failed to return driver to pool, closing it");
                     driver.quit();
                 }
             } catch (Exception e) {
-                logger.warn("Error returning driver to pool: {}", e.getMessage());
                 try {
                     driver.quit();
                 } catch (Exception ignored) {}
             } finally {
-                driverSemaphore.release(); // 释放许可
+                driverSemaphore.release();
             }
         } else {
-            driverSemaphore.release(); // 释放许可
+            driverSemaphore.release();
         }
     }
     
@@ -356,136 +367,97 @@ public class WebScrapingService {
         WebDriver driver = null;
         
         try {
-            logger.debug("Checking stock for URL: {}", url);
-            
-            // 快速HTTP连接检查
-            if (!isUrlAccessible(url)) {
-                logger.warn("URL not accessible via HTTP check: {}", url);
+            // 1. 快速缓存检查
+            PageInfo cachedInfo = pageCache.getIfPresent(url);
+            if (cachedInfo != null) {
                 return StockCheckResult.builder()
+                    .inStock(cachedInfo.isInStock())
+                    .responseTime((int)(System.currentTimeMillis() - startTime))
+                    .build();
+            }
+            
+            // 2. HTTP可访问性检查
+            try {
+                Boolean isAccessible = connectivityCache.get(url);
+                if (!isAccessible) {
+                    return StockCheckResult.builder()
                         .inStock(false)
                         .responseTime((int)(System.currentTimeMillis() - startTime))
-                        .errorMessage("URL not accessible")
+                        .errorMessage("URL不可访问")
                         .build();
-            }
-            
-            // 检查缓存
-            PageInfo cachedInfo = pageCache.get(url);
-            if (cachedInfo != null && !isCacheExpired(cachedInfo)) {
-                logger.debug("Using cached page info for faster check");
-                
-                // 使用池中的driver进行快速检测
-                driver = borrowDriver();
-                boolean inStock = quickStockCheck(cachedInfo, driver);
-                long responseTime = System.currentTimeMillis() - startTime;
-                return StockCheckResult.builder()
-                        .inStock(inStock)
-                        .responseTime((int) responseTime)
-                        .build();
-            }
-            
-            // 获取driver实例
-            driver = borrowDriver();
-            
-            try {
-                // 尝试快速加载页面
-                driver.get(url);
-                logger.debug("Page navigation initiated for: {}", url);
-            } catch (Exception e) {
-                logger.warn("Page load timeout or error for {}: {}", url, e.getMessage());
-                // 继续尝试检测，有时页面部分加载也足够
-            }
-            
-            // 优化的等待策略：只等待关键元素，不等整个页面
-            WebDriverWait wait = new WebDriverWait(driver, Duration.ofSeconds(config.getMonitor().getSelenium().getPerformance().getSmartWaitTimeout()));
-            
-            try {
-                // 策略1：等待任何可能的按钮元素出现
-                wait.until(ExpectedConditions.or(
-                    ExpectedConditions.presenceOfElementLocated(By.cssSelector("button[class*='btn'], div[class*='btn'], div[class*='usBtn']")),
-                    ExpectedConditions.presenceOfElementLocated(By.xpath("//*[contains(text(), 'Add to Bag') or contains(text(), 'add to bag')]")),
-                    ExpectedConditions.presenceOfElementLocated(By.cssSelector("*[class*='button'], *[class*='Button']"))
-                ));
-                logger.debug("Key elements detected, proceeding with stock check");
-            } catch (Exception e) {
-                logger.debug("Key element wait timeout, but proceeding with check: {}", e.getMessage());
-                // 即使等待超时也继续检测，有时页面部分加载也足够
-            }
-            
-            // 短暂等待确保JavaScript执行
-            try {
-                Thread.sleep(500);
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-            }
-            
-            String pageSource = driver.getPageSource();
-            String currentUrl = driver.getCurrentUrl();
-            String pageTitle = driver.getTitle();
-            
-            logger.debug("Page ready with content length: {} characters", pageSource.length());
-            logger.debug("Current URL: {}, Page Title: {}", currentUrl, pageTitle);
-            
-            // 验证页面是否正确加载
-            if (pageTitle.isEmpty() || pageSource.length() < 5000) {
-                logger.warn("Page may not be fully loaded - Title: '{}', Content length: {}", pageTitle, pageSource.length());
-                // 再等待一段时间
-                try {
-                    Thread.sleep(2000);
-                    pageSource = driver.getPageSource();
-                    pageTitle = driver.getTitle();
-                    logger.debug("After additional wait - Title: '{}', Content length: {}", pageTitle, pageSource.length());
-                } catch (InterruptedException e) {
-                    Thread.currentThread().interrupt();
                 }
+            } catch (Exception e) {
+                logger.warn("HTTP检查失败: {}", e.getMessage());
             }
             
-            // 快速库存检测
-            boolean inStock = isAddToBagButtonPresent(driver);
+            // 3. 获取WebDriver并检查库存
+            driver = borrowDriver();
+            boolean inStock = checkStockWithDriver(driver, url);
             
-            // 缓存页面信息
-            PageInfo pageInfo = new PageInfo(currentUrl, pageTitle, System.currentTimeMillis());
-            pageCache.put(url, pageInfo);
-            
-            long responseTime = System.currentTimeMillis() - startTime;
-            
-            logger.debug("Stock check completed for {}: {} ({}ms)", url, inStock ? "IN STOCK" : "OUT OF STOCK", responseTime);
+            // 4. 更新缓存
+            pageCache.put(url, new PageInfo(url, driver.getTitle(), inStock, System.currentTimeMillis()));
             
             return StockCheckResult.builder()
-                    .inStock(inStock)
-                    .responseTime((int) responseTime)
-                    .build();
-            
+                .inStock(inStock)
+                .responseTime((int)(System.currentTimeMillis() - startTime))
+                .build();
+                
         } catch (Exception e) {
-            long responseTime = System.currentTimeMillis() - startTime;
-            logger.error("Error checking stock for URL: {}", url, e);
-            
+            logger.error("检查库存失败: {}", e.getMessage());
             return StockCheckResult.builder()
-                    .inStock(false)
-                    .responseTime((int) responseTime)
-                    .errorMessage(e.getMessage())
-                    .build();
+                .inStock(false)
+                .responseTime((int)(System.currentTimeMillis() - startTime))
+                .errorMessage(e.getMessage())
+                .build();
         } finally {
-            // 归还driver到池中
             if (driver != null) {
                 returnDriver(driver);
             }
         }
     }
     
-    /**
-     * 使用缓存信息进行快速库存检测
-     */
-    private boolean quickStockCheck(PageInfo cachedInfo, WebDriver driver) {
+    private boolean checkStockWithDriver(WebDriver driver, String url) {
         try {
-            // 如果页面URL没变，直接检测按钮
-            String currentUrl = driver.getCurrentUrl();
-            if (currentUrl.equals(cachedInfo.getUrl())) {
-                return isAddToBagButtonPresent(driver);
+            // 设置页面加载策略
+            driver.manage().timeouts().pageLoadTimeout(Duration.ofSeconds(10));
+            driver.manage().timeouts().scriptTimeout(Duration.ofSeconds(5));
+            
+            // 加载页面
+            driver.get(url);
+            
+            // 使用显式等待检查关键元素
+            WebDriverWait wait = new WebDriverWait(driver, Duration.ofSeconds(5));
+            try {
+                wait.until(ExpectedConditions.or(
+                    ExpectedConditions.presenceOfElementLocated(By.cssSelector("button[class*='btn']")),
+                    ExpectedConditions.presenceOfElementLocated(By.xpath("//*[contains(text(), 'Add to Bag')]"))
+                ));
+            } catch (Exception e) {
+                logger.debug("等待关键元素超时: {}", e.getMessage());
             }
+            
+            return isAddToBagButtonPresent(driver);
         } catch (Exception e) {
-            logger.debug("Quick stock check failed: {}", e.getMessage());
+            logger.error("检查库存时发生错误: {}", e.getMessage());
+            return false;
         }
-        return false;
+    }
+    
+    private boolean checkUrlConnectivity(String urlString) {
+        try {
+            URL url = new URL(urlString);
+            HttpURLConnection connection = (HttpURLConnection) url.openConnection();
+            connection.setRequestMethod("HEAD");
+            connection.setConnectTimeout(3000);
+            connection.setReadTimeout(3000);
+            connection.setRequestProperty("User-Agent", config.getMonitor().getSelenium().getUserAgent());
+            
+            int responseCode = connection.getResponseCode();
+            return responseCode >= 200 && responseCode < 400;
+        } catch (Exception e) {
+            logger.debug("URL连接检查失败: {}", e.getMessage());
+            return false;
+        }
     }
     
     private boolean isAddToBagButtonPresent(WebDriver driver) {
@@ -647,29 +619,25 @@ public class WebScrapingService {
     }
     
     /**
-     * 页面信息缓存类
+     * 优化的页面信息缓存类
      */
     private static class PageInfo {
         private final String url;
         private final String title;
+        private final boolean inStock;
         private final long timestamp;
         
-        public PageInfo(String url, String title, long timestamp) {
+        public PageInfo(String url, String title, boolean inStock, long timestamp) {
             this.url = url;
             this.title = title;
+            this.inStock = inStock;
             this.timestamp = timestamp;
         }
         
         public String getUrl() { return url; }
         public String getTitle() { return title; }
+        public boolean isInStock() { return inStock; }
         public long getTimestamp() { return timestamp; }
-    }
-    
-    /**
-     * 检查页面缓存是否过期
-     */
-    private boolean isCacheExpired(PageInfo pageInfo) {
-        return System.currentTimeMillis() - pageInfo.getTimestamp() > config.getMonitor().getSelenium().getPerformance().getCacheDuration();
     }
     
     /**
@@ -725,51 +693,5 @@ public class WebScrapingService {
         
         logger.info("Performance test completed: {}", result);
         return result;
-    }
-    
-    /**
-     * 快速HTTP连接检查，避免不必要的Selenium调用
-     */
-    private boolean isUrlAccessible(String urlString) {
-        try {
-            // 检查连接缓存
-            Boolean cached = connectivityCache.get(urlString);
-            if (cached != null) {
-                return cached;
-            }
-            
-            URL url = new URL(urlString);
-            HttpURLConnection connection = (HttpURLConnection) url.openConnection();
-            connection.setRequestMethod("HEAD");
-            connection.setConnectTimeout(config.getMonitor().getSelenium().getPerformance().getHttpCheckTimeout());
-            connection.setReadTimeout(config.getMonitor().getSelenium().getPerformance().getHttpCheckTimeout());
-            connection.setRequestProperty("User-Agent", config.getMonitor().getSelenium().getUserAgent());
-            
-            int responseCode = connection.getResponseCode();
-            boolean accessible = responseCode >= 200 && responseCode < 400;
-            
-            // 缓存结果
-            connectivityCache.put(urlString, accessible);
-            
-            // 清理过期缓存
-            cleanupConnectivityCache();
-            
-            logger.debug("HTTP connectivity check for {}: {} ({})", urlString, accessible, responseCode);
-            return accessible;
-            
-        } catch (IOException e) {
-            logger.debug("HTTP connectivity check failed for {}: {}", urlString, e.getMessage());
-            connectivityCache.put(urlString, false);
-            return false;
-        }
-    }
-    
-    /**
-     * 清理过期的连接缓存
-     */
-    private void cleanupConnectivityCache() {
-        if (connectivityCache.size() > 100) { // 避免缓存过大
-            connectivityCache.clear();
-        }
     }
 } 
