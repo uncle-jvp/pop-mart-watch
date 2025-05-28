@@ -63,8 +63,17 @@ check_and_install_tools() {
         # 更新系统
         sudo yum update -y
         
-        # 安装基础工具
-        sudo yum install -y curl wget unzip git htop nano tree
+        # 安装基础工具（跳过curl，因为curl-minimal已经足够）
+        sudo yum install -y wget unzip git htop nano tree
+        
+        # 检查curl是否可用，如果不可用则安装
+        if ! command -v curl &> /dev/null; then
+            log_info "安装 curl..."
+            # 使用 --allowerasing 解决包冲突
+            sudo yum install -y curl --allowerasing
+        else
+            log_info "curl 已可用，跳过安装"
+        fi
         
         # 安装 Java 1.8
         if ! command -v java &> /dev/null; then
