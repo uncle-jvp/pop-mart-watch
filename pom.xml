@@ -28,30 +28,7 @@
         <selenium.version>3.141.59</selenium.version>
         <jda.version>5.0.0-beta.18</jda.version>
         <mybatis-plus.version>3.5.3.1</mybatis-plus.version>
-        <okhttp.version>4.9.3</okhttp.version>
-        <kotlin.version>1.8.22</kotlin.version>
     </properties>
-
-    <dependencyManagement>
-        <dependencies>
-            <!-- Force compatible versions to resolve conflicts -->
-            <dependency>
-                <groupId>com.squareup.okhttp3</groupId>
-                <artifactId>okhttp</artifactId>
-                <version>${okhttp.version}</version>
-            </dependency>
-            <dependency>
-                <groupId>org.jetbrains.kotlin</groupId>
-                <artifactId>kotlin-stdlib</artifactId>
-                <version>${kotlin.version}</version>
-            </dependency>
-            <dependency>
-                <groupId>org.jetbrains.kotlin</groupId>
-                <artifactId>kotlin-stdlib-common</artifactId>
-                <version>${kotlin.version}</version>
-            </dependency>
-        </dependencies>
-    </dependencyManagement>
 
     <dependencies>
         <!-- Spring Boot Starters -->
@@ -116,13 +93,6 @@
             <groupId>io.github.bonigarcia</groupId>
             <artifactId>webdrivermanager</artifactId>
             <version>4.4.3</version>
-        </dependency>
-
-        <!-- Compatible OkHttp version -->
-        <dependency>
-            <groupId>com.squareup.okhttp3</groupId>
-            <artifactId>okhttp</artifactId>
-            <version>${okhttp.version}</version>
         </dependency>
 
         <!-- Discord JDA -->
