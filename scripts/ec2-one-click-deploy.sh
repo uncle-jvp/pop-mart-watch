@@ -1,11 +1,12 @@
 #!/bin/bash
 
 # Pop Mart Watch - EC2 一键部署脚本
-# 版本: 3.1.0
-# 更新日期: 2024-01-XX
+# 版本: 4.0.0
+# 更新日期: 2025-05-28
 # 整合环境设置、配置、构建和部署的所有步骤
 # 
 # 更新日志:
+# v4.0.0 - 升级到 Java 17，修复 Selenium 4.x 兼容性问题，添加 stock_changed 字段支持
 # v3.1.0 - 降级到 Java 8，修复 Selenium 3.x 兼容性问题
 # v3.0.0 - 升级到 Java 17，修复 Selenium 兼容性问题
 # v2.0.0 - 修复 Spring Boot 配置文件问题，改进错误诊断
@@ -13,7 +14,7 @@
 
 set -e
 
-echo "🚀 Pop Mart Watch EC2 一键部署 v3.1.0 (Java 8)"
+echo "🚀 Pop Mart Watch EC2 一键部署 v4.0.0 (Java 17)"
 echo "=============================================="
 echo ""
 
@@ -83,10 +84,10 @@ check_and_install_tools() {
             log_info "curl 已可用，跳过安装"
         fi
         
-        # 安装 Java 8
+        # 安装 Java 17
         if ! command -v java &> /dev/null; then
-            log_info "安装 Java 8..."
-            sudo yum install -y java-1.8.0-openjdk java-1.8.0-openjdk-devel
+            log_info "安装 Java 17..."
+            sudo yum install -y java-17-amazon-corretto java-17-amazon-corretto-devel
         fi
         
         # 安装 Maven
@@ -119,10 +120,10 @@ check_and_install_tools() {
         # 安装基础工具
         sudo apt-get install -y curl wget unzip git htop nano tree apt-transport-https ca-certificates gnupg lsb-release
         
-        # 安装 Java 8
+        # 安装 Java 17
         if ! command -v java &> /dev/null; then
-            log_info "安装 Java 8..."
-            sudo apt-get install -y openjdk-8-jdk
+            log_info "安装 Java 17..."
+            sudo apt-get install -y openjdk-17-jdk
         fi
         
         # 安装 Maven
@@ -306,10 +307,10 @@ EOF
     # 创建 Docker 应用配置
     mkdir -p src/main/resources
     cat > src/main/resources/application-production.yml << 'EOF'
-# Pop Mart Watch Production 环境配置 (Java 8)
+# Pop Mart Watch Production 环境配置 (Java 17)
 spring:
   datasource:
-    url: jdbc:mysql://mysql:3306/${DB_NAME:popmart_watch}?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC&characterEncoding=utf8mb4
+    url: jdbc:mysql://mysql:3306/${DB_NAME:popmart_watch}?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC&characterEncoding=utf8
     username: ${DB_USERNAME:popmart}
     password: ${DB_PASSWORD}
     driver-class-name: com.mysql.cj.jdbc.Driver
