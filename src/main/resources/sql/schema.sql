@@ -40,6 +40,7 @@ CREATE TABLE stock_check_history (
     response_time INT COMMENT '响应时间(毫秒)',
     checked_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP COMMENT '检查时间',
     error_message TEXT COMMENT '错误信息',
+    stock_changed BOOLEAN DEFAULT FALSE COMMENT '库存状态是否发生变化',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
     deleted TINYINT DEFAULT 0 COMMENT '逻辑删除标记'

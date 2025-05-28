@@ -191,6 +191,23 @@ public class MonitoringService {
             history.setResponseTime(result.getResponseTime());
             history.setErrorMessage(result.getErrorMessage());
             history.setCheckedAt(LocalDateTime.now());
+            
+            // Check if stock status changed
+            boolean stockChanged = !Boolean.valueOf(result.getInStock()).equals(product.getLastKnownStock());
+            history.setStockChanged(stockChanged);
+            
+            if (stockChanged) {
+                logger.info("Stock status changed for {}: {} -> {}", 
+                    product.getProductName(), 
+                    product.getLastKnownStock() ? "IN STOCK" : "OUT OF STOCK",
+                    result.getInStock() ? "IN STOCK" : "OUT OF STOCK");
+                
+                // Send notification if product came back in stock
+                if (result.getInStock()) {
+                    notificationService.sendStockAlert(product);
+                }
+            }
+            
             historyRepository.insert(history);
             
             // 动态调整优先级
@@ -289,7 +306,7 @@ public class MonitoringService {
             
             // Check if stock status changed
             boolean stockChanged = !Boolean.valueOf(result.getInStock()).equals(product.getLastKnownStock());
-            // history.setStockChanged(stockChanged);  // 暂时注释掉，数据库表中没有此字段
+            history.setStockChanged(stockChanged);
             
             if (stockChanged) {
                 logger.info("Stock status changed for {}: {} -> {}", 
