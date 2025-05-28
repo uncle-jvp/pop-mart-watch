@@ -1,12 +1,18 @@
 #!/bin/bash
 
 # Pop Mart Watch - EC2 一键部署脚本
+# 版本: 2.0.0
+# 更新日期: 2024-01-XX
 # 整合环境设置、配置、构建和部署的所有步骤
+# 
+# 更新日志:
+# v2.0.0 - 修复 Spring Boot 配置文件问题，改进错误诊断
+# v1.0.0 - 初始版本
 
 set -e
 
-echo "🚀 Pop Mart Watch EC2 一键部署"
-echo "==============================="
+echo "🚀 Pop Mart Watch EC2 一键部署 v2.0.0"
+echo "====================================="
 echo ""
 
 # 颜色定义
@@ -300,9 +306,6 @@ EOF
     cat > src/main/resources/application-docker.yml << 'EOF'
 # Pop Mart Watch Docker 环境配置
 spring:
-  profiles:
-    active: docker
-  
   datasource:
     url: jdbc:mysql://mysql:3306/${DB_NAME:popmart_watch}?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC&characterEncoding=utf8mb4
     username: ${DB_USERNAME:popmart}
@@ -396,7 +399,17 @@ echo "=================="
 
 # 检查是否需要重新构建
 FORCE_REBUILD=false
-if [ -f "target/pop-mart-watch-1.0.0.jar" ] && docker images | grep -q "pop-mart-watch"; then
+
+# 检查配置文件是否比 JAR 文件新
+CONFIG_CHANGED=false
+if [ -f "target/pop-mart-watch-1.0.0.jar" ] && [ -f "src/main/resources/application-docker.yml" ]; then
+    if [ "src/main/resources/application-docker.yml" -nt "target/pop-mart-watch-1.0.0.jar" ]; then
+        CONFIG_CHANGED=true
+        log_info "检测到配置文件已更新"
+    fi
+fi
+
+if [ -f "target/pop-mart-watch-1.0.0.jar" ] && docker images | grep -q "pop-mart-watch" && [ "$CONFIG_CHANGED" = false ]; then
     log_info "检测到现有构建和镜像"
     read -p "是否强制重新构建？(y/N): " -n 1 -r
     echo
@@ -405,6 +418,9 @@ if [ -f "target/pop-mart-watch-1.0.0.jar" ] && docker images | grep -q "pop-mart
     fi
 else
     FORCE_REBUILD=true
+    if [ "$CONFIG_CHANGED" = true ]; then
+        log_info "配置文件已更新，需要重新构建"
+    fi
 fi
 
 if [ "$FORCE_REBUILD" = true ]; then
@@ -554,7 +570,27 @@ done
 
 if [ $ATTEMPT -gt $MAX_ATTEMPTS ]; then
     log_error "应用启动超时"
-    docker-compose logs app
+    log_info "正在收集诊断信息..."
+    
+    # 显示应用日志
+    echo ""
+    echo "📋 应用日志 (最后 50 行):"
+    docker-compose logs --tail=50 app
+    
+    # 显示容器状态
+    echo ""
+    echo "📊 容器状态:"
+    docker-compose ps
+    
+    # 检查常见问题
+    echo ""
+    echo "🔍 故障排除建议:"
+    echo "1. 检查配置文件是否正确: src/main/resources/application-docker.yml"
+    echo "2. 检查环境变量是否设置: cat .env"
+    echo "3. 检查数据库连接: docker-compose exec mysql mysql -u $DB_USERNAME -p$DB_PASSWORD -e 'SELECT 1'"
+    echo "4. 重新构建应用: mvn clean package -DskipTests && docker-compose up --build -d"
+    echo "5. 查看完整日志: docker-compose logs -f app"
+    
     exit 1
 fi
 
