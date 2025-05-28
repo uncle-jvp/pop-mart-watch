@@ -24,6 +24,7 @@ import java.net.HttpURLConnection;
 import java.net.URL;
 import java.util.List;
 import java.util.concurrent.*;
+import java.time.Duration;
 
 /**
  * Web scraping service for checking Pop Mart product stock
@@ -68,23 +69,22 @@ public class WebScrapingService {
     
     private static final String XPATH_ADD_TO_BAG = "//*[contains(text(), 'Add to Bag') or contains(text(), 'add to bag')]";
     
-    // @PostConstruct  // 暂时禁用自动初始化
+    @PostConstruct  // 重新启用自动初始化
     public void initializeDriverPool() {
-        logger.info("WebDriver pool initialization temporarily disabled");
-        // logger.info("Initializing WebDriver pool with {} drivers", MAX_DRIVERS);
+        logger.info("Initializing WebDriver pool with {} drivers", MAX_DRIVERS);
         
         // 预创建WebDriver实例
-        // for (int i = 0; i < MAX_DRIVERS; i++) {
-        //     try {
-        //         WebDriver driver = createWebDriver();
-        //         driverPool.offer(driver);
-        //         logger.debug("Created WebDriver instance {}/{}", i + 1, MAX_DRIVERS);
-        //     } catch (Exception e) {
-        //         logger.error("Failed to create WebDriver instance {}: {}", i + 1, e.getMessage());
-        //     }
-        // }
+        for (int i = 0; i < MAX_DRIVERS; i++) {
+            try {
+                WebDriver driver = createWebDriver();
+                driverPool.offer(driver);
+                logger.debug("Created WebDriver instance {}/{}", i + 1, MAX_DRIVERS);
+            } catch (Exception e) {
+                logger.error("Failed to create WebDriver instance {}: {}", i + 1, e.getMessage());
+            }
+        }
         
-        // logger.info("WebDriver pool initialized with {} drivers", driverPool.size());
+        logger.info("WebDriver pool initialized with {} drivers", driverPool.size());
     }
     
     private WebDriver createWebDriver() {
@@ -149,9 +149,9 @@ public class WebScrapingService {
             
             // 使用配置的超时时间
             WebDriver driver = new ChromeDriver(options);
-            driver.manage().timeouts().implicitlyWait(config.getMonitor().getSelenium().getPerformance().getImplicitWait(), TimeUnit.SECONDS);
-            driver.manage().timeouts().pageLoadTimeout(config.getMonitor().getSelenium().getPerformance().getPageLoadTimeout(), TimeUnit.SECONDS);
-            driver.manage().timeouts().setScriptTimeout(config.getMonitor().getSelenium().getPerformance().getScriptTimeout(), TimeUnit.SECONDS);
+            driver.manage().timeouts().implicitlyWait(Duration.ofSeconds(config.getMonitor().getSelenium().getPerformance().getImplicitWait()));
+            driver.manage().timeouts().pageLoadTimeout(Duration.ofSeconds(config.getMonitor().getSelenium().getPerformance().getPageLoadTimeout()));
+            driver.manage().timeouts().scriptTimeout(Duration.ofSeconds(config.getMonitor().getSelenium().getPerformance().getScriptTimeout()));
             
             logger.info("WebDriver initialized successfully with lightweight optimizations");
             return driver;
@@ -289,7 +289,7 @@ public class WebScrapingService {
             }
             
             // 优化的等待策略：只等待关键元素，不等整个页面
-            WebDriverWait wait = new WebDriverWait(driver, config.getMonitor().getSelenium().getPerformance().getSmartWaitTimeout());
+            WebDriverWait wait = new WebDriverWait(driver, Duration.ofSeconds(config.getMonitor().getSelenium().getPerformance().getSmartWaitTimeout()));
             
             try {
                 // 策略1：等待任何可能的按钮元素出现

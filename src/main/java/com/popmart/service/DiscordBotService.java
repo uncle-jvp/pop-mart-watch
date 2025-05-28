@@ -45,13 +45,13 @@ public class DiscordBotService extends ListenerAdapter {
     
     private JDA jda;
     
-    @PostConstruct
+    @PostConstruct  // 重新启用自动初始化
     public void initializeBot() {
         String botToken = config.getDiscord().getBotToken();
         String guildId = config.getDiscord().getGuildId();
         
         if (botToken == null || botToken.trim().isEmpty()) {
-            logger.warn("Discord bot token not configured. Discord bot will not be started.");
+            logger.warn("Discord bot token not configured, skipping bot initialization");
             return;
         }
         
