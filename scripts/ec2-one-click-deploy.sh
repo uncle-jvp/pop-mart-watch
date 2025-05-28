@@ -289,7 +289,7 @@ DISCORD_WEBHOOK_URL=$DISCORD_WEBHOOK_URL
 
 # 应用配置
 SPRING_PROFILES_ACTIVE=production
-JAVA_OPTS=$JAVA_OPTS
+JAVA_OPTS="$JAVA_OPTS"
 
 # 监控配置
 POPMART_MONITOR_POLL_INTERVAL=$POLL_INTERVAL
@@ -390,7 +390,18 @@ EOF
     
     log_success "Docker 应用配置已生成"
 else
-    source .env
+    log_info "加载现有配置..."
+    # 安全地加载 .env 文件，避免执行意外命令
+    if [ -f ".env" ]; then
+        # 使用 set -a 自动导出变量，避免 source 执行问题
+        set -a
+        . .env
+        set +a
+        log_success "配置加载完成"
+    else
+        log_error ".env 文件不存在"
+        exit 1
+    fi
 fi
 
 # 步骤4: 构建应用
