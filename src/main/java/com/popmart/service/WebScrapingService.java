@@ -15,13 +15,13 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+import io.github.bonigarcia.wdm.WebDriverManager;
 
 import javax.annotation.PostConstruct;
 import javax.annotation.PreDestroy;
 import java.io.IOException;
 import java.net.HttpURLConnection;
 import java.net.URL;
-import java.time.Duration;
 import java.util.List;
 import java.util.concurrent.*;
 
@@ -88,11 +88,14 @@ public class WebScrapingService {
     
     private WebDriver createWebDriver() {
         try {
+            // 设置 ChromeDriver 路径
+            WebDriverManager.chromedriver().setup();
+            
             ChromeOptions options = new ChromeOptions();
             
             if (config.getMonitor().getSelenium().isHeadless()) {
-                // 使用新的 headless 模式（更轻量）
-                options.addArguments("--headless=new");
+                // 使用 headless 模式
+                options.addArguments("--headless");
             }
             
             // 轻量化优化参数
@@ -143,16 +146,11 @@ public class WebScrapingService {
             options.setExperimentalOption("useAutomationExtension", false);
             options.setExperimentalOption("excludeSwitches", new String[]{"enable-automation", "enable-logging"});
             
-            // 页面加载策略优化
-            options.setPageLoadStrategy(org.openqa.selenium.PageLoadStrategy.EAGER);
-            
             // 使用配置的超时时间
             WebDriver driver = new ChromeDriver(options);
-            driver.manage().timeouts().implicitlyWait(Duration.ofSeconds(config.getMonitor().getSelenium().getPerformance().getImplicitWait()));
-            driver.manage().timeouts().pageLoadTimeout(Duration.ofSeconds(config.getMonitor().getSelenium().getPerformance().getPageLoadTimeout()));
-            driver.manage().timeouts().scriptTimeout(Duration.ofSeconds(config.getMonitor().getSelenium().getPerformance().getScriptTimeout()));
-            
-            WebDriverWait wait = new WebDriverWait(driver, Duration.ofSeconds(config.getMonitor().getSelenium().getPerformance().getSmartWaitTimeout()));
+            driver.manage().timeouts().implicitlyWait(config.getMonitor().getSelenium().getPerformance().getImplicitWait(), TimeUnit.SECONDS);
+            driver.manage().timeouts().pageLoadTimeout(config.getMonitor().getSelenium().getPerformance().getPageLoadTimeout(), TimeUnit.SECONDS);
+            driver.manage().timeouts().setScriptTimeout(config.getMonitor().getSelenium().getPerformance().getScriptTimeout(), TimeUnit.SECONDS);
             
             logger.info("WebDriver initialized successfully with lightweight optimizations");
             return driver;
@@ -290,7 +288,7 @@ public class WebScrapingService {
             }
             
             // 优化的等待策略：只等待关键元素，不等整个页面
-            WebDriverWait wait = new WebDriverWait(driver, Duration.ofSeconds(config.getMonitor().getSelenium().getPerformance().getSmartWaitTimeout()));
+            WebDriverWait wait = new WebDriverWait(driver, config.getMonitor().getSelenium().getPerformance().getSmartWaitTimeout());
             
             try {
                 // 策略1：等待任何可能的按钮元素出现
