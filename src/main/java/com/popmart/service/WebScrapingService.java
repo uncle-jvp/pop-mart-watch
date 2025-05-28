@@ -73,18 +73,26 @@ public class WebScrapingService {
     public void initializeDriverPool() {
         logger.info("Initializing WebDriver pool with {} drivers", MAX_DRIVERS);
         
+        int successfulDrivers = 0;
         // 预创建WebDriver实例
         for (int i = 0; i < MAX_DRIVERS; i++) {
             try {
                 WebDriver driver = createWebDriver();
                 driverPool.offer(driver);
+                successfulDrivers++;
                 logger.debug("Created WebDriver instance {}/{}", i + 1, MAX_DRIVERS);
             } catch (Exception e) {
                 logger.error("Failed to create WebDriver instance {}: {}", i + 1, e.getMessage());
             }
         }
         
-        logger.info("WebDriver pool initialized with {} drivers", driverPool.size());
+        logger.info("WebDriver pool initialized with {}/{} drivers", successfulDrivers, MAX_DRIVERS);
+        
+        // 确保至少有一个可用的 WebDriver
+        if (successfulDrivers == 0) {
+            logger.error("Failed to create any WebDriver instances during initialization");
+            // 不抛出异常，而是在运行时按需创建
+        }
     }
     
     private WebDriver createWebDriver() {
@@ -126,7 +134,6 @@ public class WebScrapingService {
             
             // 性能优化配置
             options.addArguments("--blink-settings=imagesEnabled=false");
-            options.addArguments("--disable-javascript");
             options.addArguments("--disable-plugins");
             options.addArguments("--disable-images");
             options.addArguments("--disable-background-networking");
@@ -246,25 +253,41 @@ public class WebScrapingService {
      */
     private WebDriver borrowDriver() throws InterruptedException {
         driverSemaphore.acquire(); // 获取许可
-        WebDriver driver = driverPool.poll(5, TimeUnit.SECONDS);
-        if (driver == null) {
-            driverSemaphore.release();
-            throw new RuntimeException("Failed to get WebDriver from pool within timeout");
-        }
         
-        // 检查driver是否还活着
         try {
-            driver.getCurrentUrl();
-        } catch (Exception e) {
-            logger.warn("Driver from pool is dead, creating new one");
-            try {
-                driver.quit();
-            } catch (Exception ignored) {}
+            // 增加超时时间到 15 秒，适应 Docker 环境
+            WebDriver driver = driverPool.poll(15, TimeUnit.SECONDS);
             
-            driver = createWebDriver();
+            if (driver == null) {
+                logger.warn("No driver available from pool, creating new one");
+                try {
+                    driver = createWebDriver();
+                    logger.info("Successfully created new WebDriver instance");
+                } catch (Exception e) {
+                    logger.error("Failed to create new WebDriver: {}", e.getMessage());
+                    throw new RuntimeException("Failed to get WebDriver from pool and unable to create new one: " + e.getMessage());
+                }
+            } else {
+                // 检查driver是否还活着
+                try {
+                    driver.getCurrentUrl();
+                    logger.debug("Retrieved healthy WebDriver from pool");
+                } catch (Exception e) {
+                    logger.warn("Driver from pool is dead, creating new one");
+                    try {
+                        driver.quit();
+                    } catch (Exception ignored) {}
+                    
+                    driver = createWebDriver();
+                    logger.info("Successfully replaced dead WebDriver with new instance");
+                }
+            }
+            
+            return driver;
+        } catch (Exception e) {
+            driverSemaphore.release();
+            throw e;
         }
-        
-        return driver;
     }
     
     /**
