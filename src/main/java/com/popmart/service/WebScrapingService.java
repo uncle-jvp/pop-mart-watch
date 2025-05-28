@@ -104,7 +104,10 @@ public class WebScrapingService {
             logger.info("Running in Docker environment: {}", isDocker);
             
             // 设置 WebDriverManager
-            WebDriverManager.chromedriver().setup();
+            WebDriverManager.chromedriver()
+                .clearDriverCache()
+                .clearResolutionCache()
+                .setup();
             
             ChromeOptions options = new ChromeOptions();
             
@@ -115,9 +118,23 @@ public class WebScrapingService {
                 options.addArguments("--disable-gpu");
                 options.addArguments("--remote-debugging-port=9222");
                 options.addArguments("--disable-features=VizDisplayCompositor");
-                options.addArguments("--disable-extensions-file-access-check");
-                options.addArguments("--disable-extensions-http-throttling");
-                options.addArguments("--disable-ipc-flooding-protection");
+                options.addArguments("--disable-extensions");
+                options.addArguments("--disable-software-rasterizer");
+                options.addArguments("--disable-setuid-sandbox");
+                options.addArguments("--single-process");
+                options.addArguments("--no-zygote");
+                options.addArguments("--disable-infobars");
+                options.addArguments("--disable-notifications");
+                options.addArguments("--disable-popup-blocking");
+                options.addArguments("--disable-save-password-bubble");
+                options.addArguments("--disable-site-isolation-trials");
+                options.addArguments("--disable-web-security");
+                options.addArguments("--ignore-certificate-errors");
+                options.addArguments("--ignore-ssl-errors");
+                options.addArguments("--allow-running-insecure-content");
+                options.addArguments("--disable-blink-features=AutomationControlled");
+                options.addArguments("--window-size=1920,1080");  // 使用更大的窗口尺寸
+                options.addArguments("--start-maximized");
                 logger.info("Applied Docker-specific Chrome options");
             }
             
@@ -176,29 +193,13 @@ public class WebScrapingService {
             
             // 设置 Chrome 二进制路径（Docker 环境）
             if (isDocker) {
-                String chromeBinary = System.getenv("CHROME_BIN");
-                if (chromeBinary == null || chromeBinary.isEmpty()) {
-                    // 尝试常见的 Chrome 路径
-                    String[] possiblePaths = {
-                        "/usr/bin/chromium-browser",
-                        "/usr/bin/chromium",
-                        "/usr/bin/google-chrome",
-                        "/usr/bin/google-chrome-stable"
-                    };
-                    
-                    for (String path : possiblePaths) {
-                        if (new java.io.File(path).exists()) {
-                            chromeBinary = path;
-                            break;
-                        }
-                    }
-                }
-                
-                if (chromeBinary != null && !chromeBinary.isEmpty()) {
+                String chromeBinary = "/usr/bin/google-chrome"; // 直接使用已知的Google Chrome路径
+                if (new java.io.File(chromeBinary).exists()) {
                     options.setBinary(chromeBinary);
                     logger.info("Using Chrome binary: {}", chromeBinary);
                 } else {
-                    logger.warn("Chrome binary not found, using default");
+                    logger.error("Chrome binary not found at {}", chromeBinary);
+                    throw new RuntimeException("Chrome binary not found. Please ensure Google Chrome is installed.");
                 }
             }
             
