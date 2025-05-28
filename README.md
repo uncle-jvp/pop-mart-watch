@@ -28,6 +28,7 @@
   - **统一 DTO 管理**：请求/响应对象统一管理，类型安全
   - **参数验证**：使用 Bean Validation 进行请求参数校验
   - **Builder 模式**：所有 DTO 类支持 Builder 模式构建
+- 🆔 **Product ID 管理**: 自动从URL提取商品ID，Discord通知包含完整商品信息
 
 ## 技术栈 🛠️
 
@@ -44,596 +45,324 @@
 - **Maven** - 项目构建工具
 - **Docker** - 容器化部署
 
-## 项目架构 🏗️
-
-### 目录结构
-```
-src/main/java/com/popmart/
-├── config/                 # 配置类
-├── controller/             # REST API 控制器
-├── dto/                    # 数据传输对象
-│   ├── request/           # 请求 DTO
-│   │   ├── AddProductRequest.java
-│   │   └── TestProductRequest.java
-│   └── response/          # 响应 DTO
-│       ├── ApiResponse.java
-│       ├── MonitoringStats.java
-│       ├── PerformanceTestResult.java
-│       ├── StockCheckResult.java
-│       └── TestStockResponse.java
-├── entity/                 # 数据库实体类
-├── repository/             # 数据访问层
-├── service/                # 业务逻辑层
-└── utils/                  # 工具类
-```
-
-### DTO 设计模式
-
-项目采用统一的 DTO 管理模式：
-
-**请求 DTO (Request)**：
-- 使用 `@Data` 注解自动生成 getter/setter
-- 集成 Bean Validation 进行参数校验
-- 支持正则表达式验证 Pop Mart URL 格式
-
-**响应 DTO (Response)**：
-- 使用 `@Builder` 模式支持链式构建
-- 统一的 `ApiResponse<T>` 包装器
-- 类型安全的泛型设计
-
-**示例代码**：
-```java
-// 请求 DTO
-@Data
-public class AddProductRequest {
-    @NotBlank(message = "商品 URL 不能为空")
-    @Pattern(regexp = "^https://www\\.popmart\\.com/us/products/.*", 
-             message = "URL 必须是 Pop Mart US 官网商品链接")
-    private String url;
-    
-    private String productName;
-    
-    @NotBlank(message = "用户 ID 不能为空")
-    private String userId;
-}
-
-// 响应 DTO
-@Data
-@Builder
-@NoArgsConstructor
-@AllArgsConstructor
-public class StockCheckResult {
-    private Boolean inStock;
-    private Integer responseTime;
-    private String errorMessage;
-    
-    public boolean hasError() {
-        return errorMessage != null && !errorMessage.trim().isEmpty();
-    }
-}
-
-// 统一响应包装器
-ApiResponse<MonitoredProduct> response = ApiResponse.success("商品添加成功", product);
-```
-
-## 快速开始 🚀
+## AWS EC2 Docker 部署指南 🚀
 
 ### 前置要求
 
-- Java 1.8+
-- Maven 3.6+
-- MySQL 5.7+ / 8.0+
-- Chrome/Chromium 浏览器
-- Docker (可选，用于容器化部署)
+- AWS 账户
+- 基本的 Linux 命令行知识
+- Discord Bot Token 和 Webhook URL
 
-### 本地运行
+### 第一步：创建 EC2 实例
 
-1. **克隆项目**
-   ```bash
-   git clone https://github.com/your-username/pop-mart-watch.git
-   cd pop-mart-watch
-   ```
+1. **登录 AWS 控制台**，进入 EC2 服务
 
-2. **设置 MySQL 数据库**
-   ```sql
-   CREATE DATABASE popmart_watch CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-   ```
-   
-   然后执行 `src/main/resources/sql/schema.sql` 中的建表语句。
+2. **启动新实例**：
+   - **AMI**: Amazon Linux 2 或 Ubuntu 20.04 LTS
+   - **实例类型**: t3.medium（推荐）或 t3.large（高负载）
+   - **存储**: 30GB SSD
+   - **安全组规则**:
+     ```
+     SSH (22)     - 您的IP地址
+     HTTP (80)    - 0.0.0.0/0 (可选，用于健康检查)
+     HTTPS (443)  - 0.0.0.0/0 (可选)
+     Custom (8080) - 您的IP地址 (应用端口)
+     ```
 
-3. **配置应用**
-   ```bash
-   # 复制配置模板
-   cp src/main/resources/application-local.yml.example src/main/resources/application-local.yml
-   
-   # 编辑配置文件
-   nano src/main/resources/application-local.yml
-   ```
-   
-   主要需要修改的配置：
-   ```yaml
-   spring:
-     datasource:
-       username: root                    # 您的 MySQL 用户名
-       password: your_mysql_password     # 您的 MySQL 密码
-   
-   popmart:
-     monitor:
-       notification:
-         type: log  # 本地环境使用日志通知
-         # type: discord  # 如需测试 Discord 通知
-         discord:
-           webhook-url: "https://discord.com/api/webhooks/YOUR_WEBHOOK_URL"
-     discord:
-       bot-token: your_discord_bot_token_here  # Discord Bot Token
-       guild-id: your_discord_guild_id_here    # Discord 服务器 ID
-   ```
+3. **下载密钥对**并保存到安全位置
 
-4. **运行应用**
-   ```bash
-   # 手动运行
-   mvn clean package -DskipTests
-   java -jar target/pop-mart-watch-1.0.0.jar --spring.profiles.active=local
-   ```
-
-5. **性能测试（可选）**
-   ```bash
-   # 运行全面性能测试（推荐）
-   chmod +x scripts/performance-test-optimized.sh
-   ./scripts/performance-test-optimized.sh
-   ```
-   
-   **优化后性能测试将验证**：
-   - ✅ **新版Headless Chrome**：启动时间减少60%
-   - ✅ **WebDriver池效果**：池复用响应时间 < 200ms
-   - ✅ **并发性能**：3个同时检测无阻塞
-   - ✅ **智能缓存**：缓存命中性能提升95%+
-   - ✅ **系统资源**：内存使用 < 500MB
-
-## AWS EC2 部署 ☁️
-
-### 方案1：全新 EC2 实例部署
-
-#### 1. 创建 EC2 实例
-
-在 AWS 控制台创建 EC2 实例：
-- **实例类型**: t3.medium 或更高（推荐 t3.large）
-- **操作系统**: Amazon Linux 2 或 Ubuntu 20.04+
-- **存储**: 至少 20GB SSD
-- **安全组**: 开放端口 22 (SSH), 8080 (应用), 3306 (MySQL，可选)
-
-#### 2. 连接到 EC2 实例
+### 第二步：连接到 EC2 实例
 
 ```bash
-# 使用 SSH 连接到 EC2 实例
-ssh -i your-key.pem ec2-user@your-ec2-public-ip
+# 设置密钥权限
+chmod 400 your-key.pem
 
-# 或者使用 Ubuntu
-ssh -i your-key.pem ubuntu@your-ec2-public-ip
+# 连接到实例
+ssh -i your-key.pem ec2-user@your-ec2-public-ip
+# 或者 Ubuntu 系统使用：
+# ssh -i your-key.pem ubuntu@your-ec2-public-ip
 ```
 
-#### 3. 运行环境设置脚本
+### 第三步：一键部署
+
+在 EC2 实例上运行一键部署脚本：
 
 ```bash
 # 下载项目
 git clone https://github.com/your-username/pop-mart-watch.git
 cd pop-mart-watch
 
-# 运行环境设置脚本
-chmod +x scripts/ec2-setup.sh
-./scripts/ec2-setup.sh
+# 运行一键部署脚本
+chmod +x scripts/ec2-one-click-deploy.sh
+./scripts/ec2-one-click-deploy.sh
 ```
 
-**⚠️ 重要：Docker 权限问题**
+**脚本将自动完成以下步骤**：
+1. 🔧 **环境检测和设置** - 自动安装 Java、Maven、Docker、Chrome 等
+2. 📁 **项目设置** - 创建必要目录和文件
+3. ⚙️ **配置设置** - 交互式配置数据库和 Discord
+4. 🔨 **构建应用** - 编译代码并构建 Docker 镜像
+5. 🚀 **部署服务** - 启动 MySQL 和应用容器
+6. 🔍 **验证部署** - 检查服务状态和健康状况
 
-环境设置脚本会安装 Docker 并将当前用户添加到 docker 组。但是组权限需要重新登录才能生效：
+### 配置 Discord Bot
+
+在部署过程中，脚本会提示您输入以下信息：
+
+1. **创建 Discord 应用**：
+   - 访问 [Discord Developer Portal](https://discord.com/developers/applications)
+   - 创建新应用程序
+   - 在 "Bot" 部分创建 Bot 并获取 Token
+
+2. **设置 Bot 权限**：
+   - 在 "OAuth2" → "URL Generator" 中选择：
+     - Scopes: `bot`, `applications.commands`
+     - Bot Permissions: `Send Messages`, `Use Slash Commands`
+
+3. **邀请 Bot 到服务器**：
+   - 使用生成的 URL 邀请 Bot 到您的 Discord 服务器
+
+4. **创建 Webhook**：
+   - 右键点击 Discord 频道 → 编辑频道
+   - 整合 → Webhook → 创建 Webhook
+   - 复制 Webhook URL
+
+### 部署完成后测试
 
 ```bash
-# 方法1：重新登录（推荐）
+# 测试 Discord 通知
+curl -X POST http://localhost:8080/api/monitor/test-discord
+
+# 添加测试商品
+curl -X POST http://localhost:8080/api/monitor/products \
+  -H "Content-Type: application/json" \
+  -d '{
+    "url": "https://www.popmart.com/us/products/1739/THE-MONSTERS-Classic-Series-Sparkly-Plush-Pendant-Blind-Box",
+    "productName": "THE MONSTERS Classic Series",
+    "userId": "test-user"
+  }'
+
+# 查看监控统计
+curl http://localhost:8080/api/monitor/stats
+```
+
+### 如果需要重新配置
+
+如果需要修改配置，可以重新运行部署脚本：
+
+```bash
+./scripts/ec2-one-click-deploy.sh
+```
+
+脚本会检测到现有配置并询问是否要重新配置。
+
+### 手动配置（高级用户）
+
+如果您需要更精细的控制，也可以分步执行：
+
+```bash
+# 1. 环境设置
+chmod +x scripts/ec2-docker-setup.sh
+./scripts/ec2-docker-setup.sh
+
+# 重新登录以应用 Docker 权限
 exit
 ssh -i your-key.pem ec2-user@your-ec2-public-ip
+cd pop-mart-watch
 
-# 方法2：应用新的组权限
-newgrp docker
+# 2. 配置环境
+chmod +x scripts/setup-docker-env.sh
+./scripts/setup-docker-env.sh
 
-# 验证 Docker 权限
-docker info
+# 3. 构建应用
+chmod +x scripts/docker-build.sh
+./scripts/docker-build.sh
+
+# 4. 部署服务
+chmod +x scripts/docker-deploy.sh
+./scripts/docker-deploy.sh
 ```
 
-#### 4. 设置数据库
+**📋 完整脚本说明**：查看 [scripts/README.md](scripts/README.md) 了解所有脚本的详细用法。
 
-选择数据库方案：
+## 管理和维护 🔧
 
-**方案A：使用 Docker MySQL（简单）**
-```bash
-chmod +x scripts/setup-database.sh
-./scripts/setup-database.sh local
-```
-
-**方案B：使用 AWS RDS（推荐生产环境）**
-```bash
-# 首先在 AWS 控制台创建 RDS MySQL 实例
-./scripts/setup-database.sh rds
-```
-
-**注意**：如果使用 Docker MySQL，确保 Docker 权限已正确设置。如果遇到权限问题：
-```bash
-# 检查 Docker 状态
-sudo systemctl status docker
-
-# 启动 Docker（如果未运行）
-sudo systemctl start docker
-
-# 应用组权限
-newgrp docker
-
-# 或者重新登录
-exit && ssh -i your-key.pem ec2-user@your-ec2-public-ip
-```
-
-#### 5. 配置应用
+### 服务管理
 
 ```bash
-# 复制生产环境配置模板
-cp src/main/resources/application-production.yml.example src/main/resources/application-production.yml
-
-# 编辑配置文件
-nano src/main/resources/application-production.yml
-```
-
-主要配置项：
-```yaml
-spring:
-  datasource:
-    url: jdbc:mysql://your-db-host:3306/popmart_watch
-    username: your_db_username
-    password: your_db_password
-
-popmart:
-  discord:
-    bot-token: your_discord_bot_token
-    guild-id: your_discord_guild_id
-```
-
-#### 6. 部署应用
-
-```bash
-# 运行部署脚本
-chmod +x scripts/deploy-ec2.sh
-./scripts/deploy-ec2.sh
-```
-
-#### 7. 验证部署
-
-```bash
-# 检查服务状态
-sudo systemctl status pop-mart-watch
-
-# 查看应用日志
-sudo journalctl -u pop-mart-watch -f
-
-# 测试健康检查
-curl http://localhost:8080/actuator/health
-```
-
-### 方案2：使用 Docker Compose 部署
-
-#### 1. 准备环境
-
-```bash
-# 运行 EC2 设置脚本
-./scripts/ec2-setup.sh
-
-# 创建环境变量文件
-cat > .env << EOF
-DB_NAME=popmart_watch
-DB_USERNAME=popmart
-DB_PASSWORD=popmart123
-DISCORD_BOT_TOKEN=your_discord_bot_token
-DISCORD_GUILD_ID=your_discord_guild_id
-EOF
-```
-
-#### 2. 启动服务
-
-```bash
-# 构建并启动所有服务
-docker-compose up -d
-
 # 查看服务状态
 docker-compose ps
 
+# 启动服务
+docker-compose up -d
+
+# 停止服务
+docker-compose down
+
+# 重启应用
+docker-compose restart app
+
 # 查看日志
 docker-compose logs -f app
+docker-compose logs -f mysql
+
+# 进入应用容器
+docker-compose exec app bash
+
+# 进入数据库容器
+docker-compose exec mysql mysql -u root -p
 ```
 
-### 部署后管理
-
-#### 服务管理命令
+### 应用更新
 
 ```bash
-# 查看服务状态
-sudo systemctl status pop-mart-watch
-
-# 启动/停止/重启服务
-sudo systemctl start pop-mart-watch
-sudo systemctl stop pop-mart-watch
-sudo systemctl restart pop-mart-watch
-
-# 查看实时日志
-sudo journalctl -u pop-mart-watch -f
-
-# 查看应用日志
-tail -f /opt/pop-mart-watch/logs/pop-mart-watch.log
-```
-
-#### 应用更新
-
-```bash
-# 进入应用目录
-cd /opt/pop-mart-watch
-
 # 拉取最新代码
 git pull origin main
 
-# 重新部署
-./scripts/deploy-ec2.sh
+# 方式1: 快速重新部署（推荐，适用于代码更新）
+./scripts/quick-redeploy.sh
+
+# 方式2: 完整重新部署（适用于配置变更）
+./scripts/ec2-one-click-deploy.sh
 ```
 
-#### 监控和维护
+### 数据库管理
 
 ```bash
-# 检查应用健康状态
-curl http://localhost:8080/actuator/health
+# 备份数据库
+./scripts/backup-database.sh
 
-# 查看应用指标
-curl http://localhost:8080/actuator/metrics
+# 恢复数据库
+./scripts/restore-database.sh backup_file.sql
 
+# 查看数据库状态
+docker-compose exec mysql mysql -u root -p -e "SHOW DATABASES;"
+```
+
+### 监控和日志
+
+```bash
 # 查看系统资源使用
-htop
-df -h
-free -h
-
-# 查看 Docker 容器状态（如果使用 Docker MySQL）
-docker ps
 docker stats
+
+# 查看磁盘使用
+df -h
+
+# 查看应用日志
+tail -f logs/pop-mart-watch.log
+
+# 查看 Docker 日志
+docker-compose logs --tail=100 app
 ```
 
-## 配置说明 ⚙️
+### 故障排除
 
-### 配置文件结构
-
-```
-src/main/resources/
-├── application.yml                      # 主配置文件
-├── application-local.yml.example       # 本地配置模板
-├── application-local.yml               # 本地配置（需要创建）
-├── application-production.yml.example  # 生产环境配置模板
-├── application-production.yml          # 生产环境配置（需要创建）
-└── application-docker.yml              # Docker 环境配置
-```
-
-### 主要配置项
-
-| 配置项 | 描述 | 本地环境示例 | 生产环境示例 |
-|--------|------|-------------|-------------|
-| `spring.datasource.url` | 数据库连接 URL | `localhost:3306` | `rds-endpoint:3306` |
-| `spring.datasource.username` | MySQL 用户名 | `root` | `your_username` |
-| `spring.datasource.password` | MySQL 密码 | `your_password` | `your_password` |
-| `popmart.discord.bot-token` | Discord Bot Token | `your_bot_token` | `your_bot_token` |
-| `popmart.discord.guild-id` | Discord 服务器 ID | `your_guild_id` | `your_guild_id` |
-| `popmart.monitor.poll-interval` | 监控间隔(分钟) | `2` | `5` |
-| `popmart.monitor.notification.type` | 通知类型 | `log` | `discord` |
-
-### 环境差异
-
-| 特性 | 本地环境 | 生产环境 |
-|------|----------|----------|
-| SQL 日志 | 开启 | 关闭 |
-| Druid 监控 | 开启 | 关闭 |
-| 日志级别 | DEBUG | INFO |
-| 监控间隔 | 2分钟 | 5分钟 |
-| 通知方式 | 日志 | Discord |
-| SSL | 关闭 | 开启 |
-
-### 配置步骤
-
-1. **复制配置模板**：
-   ```bash
-   # 本地环境
-   cp src/main/resources/application-local.yml.example src/main/resources/application-local.yml
-   
-   # 生产环境
-   cp src/main/resources/application-production.yml.example src/main/resources/application-production.yml
-   ```
-
-2. **编辑配置文件**：
-   ```bash
-   # 本地环境
-   nano src/main/resources/application-local.yml
-   
-   # 生产环境
-   nano src/main/resources/application-production.yml
-   ```
-
-3. **运行应用**：
-   ```bash
-   # 本地环境
-   java -jar target/pop-mart-watch-1.0.0.jar --spring.profiles.active=local
-   
-   # 生产环境
-   java -jar target/pop-mart-watch-1.0.0.jar --spring.profiles.active=production
-   ```
-
-## 故障排除 🔧
-
-### 常见问题
-
-#### 1. 数据库连接失败
+#### 1. 应用无法启动
 ```bash
-# 检查 MySQL 服务状态
-docker ps | grep mysql
-sudo systemctl status mysql
+# 检查配置文件
+cat .env
+
+# 检查 Docker 镜像
+docker images | grep pop-mart-watch
+
+# 查看详细错误日志
+docker-compose logs app
+```
+
+#### 2. 数据库连接失败
+```bash
+# 检查 MySQL 容器状态
+docker-compose ps mysql
 
 # 测试数据库连接
-mysql -h localhost -u popmart -p popmart_watch
+docker-compose exec mysql mysql -u popmart -p popmart_watch
 
-# 查看数据库日志
-docker logs popmart-mysql
+# 重启数据库
+docker-compose restart mysql
 ```
 
-#### 2. 应用启动失败
+#### 3. Discord Bot 无响应
 ```bash
-# 查看详细错误日志
-sudo journalctl -u pop-mart-watch --no-pager -l
+# 检查 Bot Token 配置
+grep DISCORD_BOT_TOKEN .env
 
-# 检查配置文件语法
-java -jar target/pop-mart-watch-1.0.0.jar --spring.profiles.active=production --spring.main.web-application-type=none --logging.level.root=ERROR
+# 查看 Discord 相关日志
+docker-compose logs app | grep -i discord
+
+# 测试 Discord 通知
+curl -X POST http://localhost:8080/api/monitor/test-discord
 ```
 
-#### 3. Chrome/Selenium 问题
+#### 4. Chrome/Selenium 问题
 ```bash
-# 检查 Chrome 安装
-google-chrome --version
+# 检查 Chrome 是否正常运行
+docker-compose exec app google-chrome --version
 
-# 检查 Chrome 是否可以无头运行
-google-chrome --headless --disable-gpu --dump-dom https://www.google.com
-```
-
-#### 4. Docker 权限问题
-```bash
-# 运行 Docker 权限检查脚本
-./scripts/check-docker.sh
-
-# 手动修复 Docker 权限
-sudo usermod -a -G docker $USER
-newgrp docker
-
-# 重新登录
-exit
-ssh -i your-key.pem ec2-user@your-ec2-ip
-```
-
-#### 5. 内存不足
-```bash
-# 检查内存使用
-free -h
-htop
-
-# 调整 JVM 内存设置
-java -Xmx1g -jar target/pop-mart-watch-1.0.0.jar --spring.profiles.active=production
+# 测试库存检测
+curl -X POST http://localhost:8080/api/monitor/test \
+  -H "Content-Type: application/json" \
+  -d '{"url": "https://www.popmart.com/us/products/1739/"}'
 ```
 
 ### 性能优化
 
 #### EC2 实例建议
 
-| 用途 | 实例类型 | vCPU | 内存 | 存储 |
-|------|----------|------|------|------|
-| 测试环境 | t3.small | 2 | 2GB | 20GB |
-| 生产环境 | t3.medium | 2 | 4GB | 30GB |
-| 高负载 | t3.large | 2 | 8GB | 50GB |
+| 用途 | 实例类型 | vCPU | 内存 | 存储 | 月费用(约) |
+|------|----------|------|------|------|-----------|
+| 测试环境 | t3.small | 2 | 2GB | 20GB | $15-20 |
+| 生产环境 | t3.medium | 2 | 4GB | 30GB | $30-35 |
+| 高负载 | t3.large | 2 | 8GB | 50GB | $60-70 |
 
-#### 数据库优化
+#### 应用性能调优
 
-```yaml
-# 生产环境数据库连接池配置
-spring:
-  datasource:
-    druid:
-      initial-size: 10
-      min-idle: 10
-      max-active: 50
-      max-wait: 60000
-      time-between-eviction-runs-millis: 60000
-      min-evictable-idle-time-millis: 300000
+```bash
+# 调整 JVM 内存设置
+# 编辑 .env 文件
+JAVA_OPTS=-Xmx2g -Xms1g -XX:+UseG1GC
+
+# 调整监控间隔
+POPMART_MONITOR_POLL_INTERVAL=3
+
+# 重启应用使配置生效
+docker-compose restart app
 ```
 
-## 监控逻辑 🔍
+## 安全建议 🔒
 
-系统通过以下步骤检测商品库存：
+### 1. 网络安全
+- 限制安全组规则，只允许必要的端口和IP
+- 使用 HTTPS（可配置 Let's Encrypt）
+- 定期更新系统和依赖
 
-1. **页面加载**: 使用 Selenium 加载商品页面
-2. **元素检测**: 查找 "Add to Bag" 按钮
-3. **多重策略**: 
-   - 按钮文本匹配
-   - CSS 选择器匹配
-   - XPath 查找
-4. **状态判断**: 按钮存在且可点击 = 有库存
-5. **数据存储**: 结果保存到 MySQL 数据库
-6. **通知发送**: 库存状态变化时发送通知
+### 2. 数据安全
+- 使用强密码
+- 定期备份数据库
+- 加密敏感配置信息
 
-## Discord Bot 使用 🤖
+### 3. 访问控制
+- 使用 IAM 角色而非根用户
+- 定期轮换密钥和Token
+- 监控访问日志
 
-### 设置 Discord Bot
+## 成本优化 💰
 
-1. 前往 [Discord Developer Portal](https://discord.com/developers/applications)
-2. 创建新应用程序和 Bot
-3. 获取 Bot Token 并配置到环境变量
-4. 邀请 Bot 到你的服务器
+### 1. EC2 成本优化
+- 使用预留实例或 Spot 实例
+- 合理选择实例类型
+- 设置自动停止策略
 
-### Discord 通知功能 📢
+### 2. 存储优化
+- 定期清理日志文件
+- 使用 EBS 快照备份
+- 监控存储使用量
 
-系统支持通过 Discord Webhook 发送精美的库存提醒通知：
+### 3. 网络优化
+- 使用 CloudFront CDN（如需要）
+- 优化数据传输
+- 监控带宽使用
 
-#### 配置 Discord 通知
-
-1. **创建 Webhook**
-   - 右键点击 Discord 频道 → 编辑频道
-   - 整合 → Webhook → 创建 Webhook
-   - 复制 Webhook URL
-
-2. **配置应用**
-   ```yaml
-   # 编辑 application.yml 或对应环境的配置文件
-   popmart:
-     monitor:
-       notification:
-         type: discord  # 启用 Discord 通知
-         discord:
-           webhook-url: "https://discord.com/api/webhooks/YOUR_WEBHOOK_URL"
-   ```
-   
-   或者使用环境变量：
-   ```bash
-   export DISCORD_WEBHOOK_URL="https://discord.com/api/webhooks/YOUR_WEBHOOK_URL"
-   ```
-
-3. **测试通知**
-   ```bash
-   # 发送测试通知
-   curl -X POST http://localhost:8080/api/monitor/test-discord
-   ```
-
-#### 通知消息格式
-
-Discord 通知包含：
-- 🎉 **标题**: Pop Mart 库存提醒
-- 📦 **商品名称**: 监控商品的名称
-- 🔗 **商品链接**: 可点击的商品页面链接
-- 🟢 **库存状态**: 现货状态
-- ⏰ **检测时间**: 最后检测时间
-- 🖼️ **缩略图**: Pop Mart Logo
-
-详细配置指南：[Discord 通知配置指南](docs/DISCORD_NOTIFICATION_GUIDE.md)
-
-### 可用命令
-
-- `/monitor-add <url> [name]` - 添加商品到监控列表
-- `/monitor-remove <url>` - 从监控列表移除商品
-- `/monitor-status` - 查看你的监控商品状态
-- `/monitor-test <url>` - 手动测试商品链接
-- `/monitor-stats` - 查看系统监控统计
-
-### 示例使用
-
-```
-/monitor-add https://www.popmart.com/us/products/1739/ "Molly Space Series"
-/monitor-status
-/monitor-test https://www.popmart.com/us/products/1739/
-```
-
-## API 接口 📡
+## API 接口文档 📡
 
 ### 统一响应格式
 
@@ -654,47 +383,15 @@ Discord 通知包含：
 ```bash
 GET /api/monitor/health
 ```
-**响应示例**：
-```json
-{
-  "code": 200,
-  "message": "系统运行正常",
-  "data": "Pop Mart Monitor - 2024-01-01T12:00:00",
-  "timestamp": 1640995200000
-}
-```
 
 #### 监控统计
 ```bash
 GET /api/monitor/stats
 ```
-**响应示例**：
-```json
-{
-  "code": 200,
-  "message": "success",
-  "data": {
-    "totalProducts": 10,
-    "inStockCount": 3,
-    "outOfStockCount": 7,
-    "priorityDistribution": {
-      "HIGH": 2,
-      "MEDIUM": 5,
-      "LOW": 3
-    }
-  },
-  "timestamp": 1640995200000
-}
-```
 
 #### 获取所有监控商品
 ```bash
 GET /api/monitor/products
-```
-
-#### 获取用户的监控商品
-```bash
-GET /api/monitor/products/user/{userId}
 ```
 
 ### 商品管理
@@ -708,29 +405,6 @@ Content-Type: application/json
   "url": "https://www.popmart.com/us/products/1739/",
   "productName": "Molly Space Series",
   "userId": "discord_user_123"
-}
-```
-
-**请求参数验证**：
-- `url`: 必填，必须是 Pop Mart US 官网商品链接
-- `productName`: 可选，商品名称
-- `userId`: 必填，用户 ID
-
-**响应示例**：
-```json
-{
-  "code": 200,
-  "message": "商品添加成功",
-  "data": {
-    "id": 1,
-    "url": "https://www.popmart.com/us/products/1739/",
-    "productName": "Molly Space Series",
-    "lastKnownStock": false,
-    "addedByUserId": "discord_user_123",
-    "createdAt": "2024-01-01T12:00:00",
-    "lastCheckedAt": "2024-01-01T12:00:00"
-  },
-  "timestamp": 1640995200000
 }
 ```
 
@@ -756,82 +430,33 @@ Content-Type: application/json
 }
 ```
 
-**响应示例**：
-```json
-{
-  "code": 200,
-  "message": "库存检测完成",
-  "data": {
-    "url": "https://www.popmart.com/us/products/1739/",
-    "inStock": true,
-    "responseTime": 143,
-    "timestamp": "2024-01-01T12:00:00",
-    "error": null
-  },
-  "timestamp": 1640995200000
-}
-```
-
 #### 测试 Discord 通知功能
 ```bash
 POST /api/monitor/test-discord
 ```
 
-**响应示例**：
-```json
-{
-  "code": 200,
-  "message": "Discord 测试通知已发送",
-  "data": "请检查您的 Discord 频道是否收到通知",
-  "timestamp": 1640995200000
-}
-```
+## Discord Bot 使用指南 🤖
 
-### 错误响应格式
+### 可用命令
 
-```json
-{
-  "code": 400,
-  "message": "商品 URL 不能为空",
-  "data": null,
-  "timestamp": 1640995200000
-}
-```
+- `/monitor-add <url> [name]` - 添加商品到监控列表
+- `/monitor-remove <url>` - 从监控列表移除商品
+- `/monitor-status` - 查看你的监控商品状态
+- `/monitor-test <url>` - 手动测试商品链接
+- `/monitor-stats` - 查看系统监控统计
 
-### 监控端点
+### Discord 通知功能
 
-- `GET /actuator/health` - 应用健康检查
-- `GET /actuator/info` - 应用信息
-- `GET /actuator/metrics` - 应用指标
+系统支持通过 Discord Webhook 发送精美的库存提醒通知，包含：
 
-### 完整请求示例
-
-```bash
-# 添加商品（带参数验证）
-curl -X POST http://your-ec2-ip:8080/api/monitor/products \
-  -H "Content-Type: application/json" \
-  -d '{
-    "url": "https://www.popmart.com/us/products/1739/",
-    "productName": "Molly Space Series",
-    "userId": "discord_user_123"
-  }'
-
-# 测试商品库存检测（优化后响应时间 < 200ms）
-curl -X POST http://your-ec2-ip:8080/api/monitor/test \
-  -H "Content-Type: application/json" \
-  -d '{
-    "url": "https://www.popmart.com/us/products/1739/"
-  }'
-
-# 测试 Discord 通知
-curl -X POST http://your-ec2-ip:8080/api/monitor/test-discord
-
-# 获取统计（包含优先级分布）
-curl http://your-ec2-ip:8080/api/monitor/stats
-
-# 健康检查
-curl http://your-ec2-ip:8080/api/monitor/health
-```
+- 🎉 **标题**: Pop Mart 库存提醒
+- 📦 **商品名称**: 监控商品的名称
+- 🆔 **商品 ID**: 从URL自动提取的商品ID（如 `1739`）
+- 🔗 **商品链接**: 可点击的商品页面链接
+- 🟢 **库存状态**: 现货状态
+- ⏰ **检测时间**: 最后检测时间
+- 👤 **监控用户**: 添加监控的用户
+- 🖼️ **缩略图**: Pop Mart Logo
 
 ## 许可证 📄
 
