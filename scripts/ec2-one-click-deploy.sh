@@ -287,7 +287,7 @@ DISCORD_GUILD_ID=$DISCORD_GUILD_ID
 DISCORD_WEBHOOK_URL=$DISCORD_WEBHOOK_URL
 
 # 应用配置
-SPRING_PROFILES_ACTIVE=docker
+SPRING_PROFILES_ACTIVE=production
 JAVA_OPTS=$JAVA_OPTS
 
 # 监控配置
@@ -303,7 +303,7 @@ EOF
     
     # 创建 Docker 应用配置
     mkdir -p src/main/resources
-    cat > src/main/resources/application-docker.yml << 'EOF'
+    cat > src/main/resources/application-production.yml << 'EOF'
 # Pop Mart Watch Docker 环境配置
 spring:
   datasource:
@@ -402,8 +402,8 @@ FORCE_REBUILD=false
 
 # 检查配置文件是否比 JAR 文件新
 CONFIG_CHANGED=false
-if [ -f "target/pop-mart-watch-1.0.0.jar" ] && [ -f "src/main/resources/application-docker.yml" ]; then
-    if [ "src/main/resources/application-docker.yml" -nt "target/pop-mart-watch-1.0.0.jar" ]; then
+if [ -f "target/pop-mart-watch-1.0.0.jar" ] && [ -f "src/main/resources/application-production.yml" ]; then
+    if [ "src/main/resources/application-production.yml" -nt "target/pop-mart-watch-1.0.0.jar" ]; then
         CONFIG_CHANGED=true
         log_info "检测到配置文件已更新"
     fi
@@ -585,7 +585,7 @@ if [ $ATTEMPT -gt $MAX_ATTEMPTS ]; then
     # 检查常见问题
     echo ""
     echo "🔍 故障排除建议:"
-    echo "1. 检查配置文件是否正确: src/main/resources/application-docker.yml"
+    echo "1. 检查配置文件是否正确: src/main/resources/application-production.yml"
     echo "2. 检查环境变量是否设置: cat .env"
     echo "3. 检查数据库连接: docker-compose exec mysql mysql -u $DB_USERNAME -p$DB_PASSWORD -e 'SELECT 1'"
     echo "4. 重新构建应用: mvn clean package -DskipTests && docker-compose up --build -d"

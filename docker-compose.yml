@@ -28,7 +28,7 @@ services:
     ports:
       - "8080:8080"
     environment:
-      - SPRING_PROFILES_ACTIVE=docker
+      - SPRING_PROFILES_ACTIVE=production
       - DB_HOST=mysql
       - DB_PORT=3306
       - DB_NAME=${DB_NAME:-popmart_watch}
