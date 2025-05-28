@@ -114,19 +114,20 @@ public class MonitoringController {
     @PostMapping("/test-discord")
     public ResponseEntity<ApiResponse<String>> testDiscordNotification() {
         try {
-            // 创建一个测试商品对象
+            // 创建一个测试商品对象，使用真实的Pop Mart URL
             MonitoredProduct testProduct = new MonitoredProduct();
             testProduct.setId(999L);
-            testProduct.setProductName("测试商品 - Pop Mart 监控系统");
-            testProduct.setUrl("https://www.popmart.com/us/products/test/");
+            testProduct.setProductId("1739"); // 设置商品ID
+            testProduct.setProductName("测试商品 - THE MONSTERS Classic Series Sparkly Plush Pendant Blind Box");
+            testProduct.setUrl("https://www.popmart.com/us/products/1739/THE-MONSTERS-Classic-Series-Sparkly-Plush-Pendant-Blind-Box");
             testProduct.setLastKnownStock(true);
-            testProduct.setAddedByUserId("test-user");
+            testProduct.setAddedByUserId("test-user-discord");
             testProduct.setLastCheckedAt(LocalDateTime.now());
             
             // 发送测试通知
             notificationService.sendStockAlert(testProduct);
             
-            return ResponseEntity.ok(ApiResponse.success("Discord 测试通知已发送", "请检查您的 Discord 频道是否收到通知"));
+            return ResponseEntity.ok(ApiResponse.success("Discord 测试通知已发送", "请检查您的 Discord 频道是否收到通知，消息中应包含商品 ID: 1739"));
             
         } catch (Exception e) {
             return ResponseEntity.badRequest().body(ApiResponse.error(400, "发送 Discord 测试通知失败: " + e.getMessage()));

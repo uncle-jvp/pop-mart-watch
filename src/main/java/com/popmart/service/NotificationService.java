@@ -44,6 +44,7 @@ public class NotificationService {
     
     private void sendLogNotification(MonitoredProduct product) {
         logger.info("🎉 STOCK ALERT: {} is now IN STOCK! 🎉", product.getProductName());
+        logger.info("Product ID: {}", product.getProductId() != null ? product.getProductId() : "未知");
         logger.info("Product URL: {}", product.getUrl());
         logger.info("Added by user: {}", product.getAddedByUserId());
     }
@@ -59,6 +60,9 @@ public class NotificationService {
         }
         
         try {
+            // 直接使用实体中存储的Product ID
+            String productId = product.getProductId();
+            
             // 构建 Discord Embed 消息
             Map<String, Object> embed = new HashMap<>();
             embed.put("title", "🎉 Pop Mart 库存提醒");
@@ -68,29 +72,41 @@ public class NotificationService {
             
             // 添加字段
             Map<String, Object> productField = new HashMap<>();
-            productField.put("name", "商品名称");
+            productField.put("name", "📦 商品名称");
             productField.put("value", product.getProductName());
             productField.put("inline", false);
             
+            // 添加Product ID字段
+            Map<String, Object> productIdField = new HashMap<>();
+            productIdField.put("name", "🆔 商品 ID");
+            productIdField.put("value", productId != null ? "`" + productId + "`" : "未知");
+            productIdField.put("inline", true);
+            
             Map<String, Object> urlField = new HashMap<>();
-            urlField.put("name", "商品链接");
+            urlField.put("name", "🔗 商品链接");
             urlField.put("value", "[点击查看商品](" + product.getUrl() + ")");
             urlField.put("inline", false);
             
             Map<String, Object> statusField = new HashMap<>();
-            statusField.put("name", "库存状态");
+            statusField.put("name", "📊 库存状态");
             statusField.put("value", "🟢 现货");
             statusField.put("inline", true);
             
             Map<String, Object> timeField = new HashMap<>();
-            timeField.put("name", "检测时间");
+            timeField.put("name", "⏰ 检测时间");
             String timeStr = product.getLastCheckedAt() != null ? 
                 product.getLastCheckedAt().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")) : 
                 "刚刚";
             timeField.put("value", timeStr);
             timeField.put("inline", true);
             
-            embed.put("fields", Arrays.asList(productField, urlField, statusField, timeField));
+            // 添加用户信息字段
+            Map<String, Object> userField = new HashMap<>();
+            userField.put("name", "👤 监控用户");
+            userField.put("value", product.getAddedByUserId());
+            userField.put("inline", true);
+            
+            embed.put("fields", Arrays.asList(productField, productIdField, urlField, statusField, timeField, userField));
             
             // 添加缩略图
             Map<String, Object> thumbnail = new HashMap<>();
@@ -99,13 +115,13 @@ public class NotificationService {
             
             // 添加页脚
             Map<String, Object> footer = new HashMap<>();
-            footer.put("text", "Pop Mart 监控系统");
+            footer.put("text", "Pop Mart 监控系统" + (productId != null ? " | ID: " + productId : ""));
             footer.put("icon_url", "https://cdn.popmart.com/website/images/favicon.ico");
             embed.put("footer", footer);
             
             // 构建完整的 Discord 消息
             Map<String, Object> discordMessage = new HashMap<>();
-            discordMessage.put("content", "📢 **库存提醒** 📢");
+            discordMessage.put("content", "📢 **库存提醒** 📢" + (productId != null ? " (ID: " + productId + ")" : ""));
             discordMessage.put("embeds", Arrays.asList(embed));
             
             // 设置请求头
@@ -124,7 +140,8 @@ public class NotificationService {
             );
             
             if (response.getStatusCode().is2xxSuccessful()) {
-                logger.info("✅ Discord notification sent successfully for product: {}", product.getProductName());
+                logger.info("✅ Discord notification sent successfully for product: {} (ID: {})", 
+                    product.getProductName(), productId != null ? productId : "未知");
             } else {
                 logger.error("❌ Failed to send Discord notification. Status: {}, Response: {}", 
                     response.getStatusCode(), response.getBody());

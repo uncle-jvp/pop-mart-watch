@@ -24,6 +24,8 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.ConcurrentHashMap;
 
 import static com.popmart.utils.urlUtils.isValidPopMartUrl;
+import static com.popmart.utils.urlUtils.extractProductId;
+import static com.popmart.utils.urlUtils.extractProductNameFromUrl;
 
 @Service
 public class MonitoringService {
@@ -349,10 +351,29 @@ public class MonitoringService {
             throw new IllegalArgumentException("Invalid Pop Mart URL. Must be from popmart.com/us/products/");
         }
         
-        MonitoredProduct product = new MonitoredProduct(url, productName, userId);
+        // 从URL中提取Product ID
+        String extractedProductId = extractProductId(url);
+        if (extractedProductId == null) {
+            throw new IllegalArgumentException("无法从URL中提取商品ID，请检查URL格式是否正确");
+        }
+        
+        // 如果没有提供商品名称，尝试从URL中提取
+        String finalProductName = productName;
+        if (finalProductName == null || finalProductName.trim().isEmpty()) {
+            finalProductName = extractProductNameFromUrl(url);
+            if (finalProductName == null || finalProductName.trim().isEmpty()) {
+                finalProductName = "Pop Mart 商品 ID: " + extractedProductId;
+            }
+        }
+        
+        MonitoredProduct product = new MonitoredProduct(url, finalProductName, userId);
+        // 设置从URL中提取的Product ID
+        product.setProductId(extractedProductId);
+        
         productRepository.insert(product);
         
-        logger.info("Added new product to monitor: {} by user {}", productName, userId);
+        logger.info("Added new product to monitor: {} (ID: {}) by user {}", 
+                   finalProductName, extractedProductId, userId);
         
         // Perform initial stock check
         try {
@@ -366,10 +387,13 @@ public class MonitoringService {
     
     @Transactional
     public void removeProduct(Long productId, String userId) {
-        MonitoredProduct product = productRepository.selectById(productId);
-        if (product == null) {
+        Optional<MonitoredProduct> productOpt = productRepository.findByProductId(productId);
+
+        if (!productOpt.isPresent()) {
             throw new IllegalArgumentException("Product not found");
         }
+
+        MonitoredProduct product = productOpt.get();
         
         if (!product.getAddedByUserId().equals(userId)) {
             throw new IllegalArgumentException("You can only remove products you added");
@@ -413,11 +437,13 @@ public class MonitoringService {
      */
     @Transactional
     public StockCheckHistory checkProductById(Long productId, String userId) {
-        MonitoredProduct product = productRepository.selectById(productId);
-        if (product == null) {
+        Optional<MonitoredProduct> productOpt = productRepository.findByProductId(productId);
+        if (!productOpt.isPresent()) {
             throw new IllegalArgumentException("Product not found");
         }
-        
+
+        MonitoredProduct product = productOpt.get();
+
         if (!product.getAddedByUserId().equals(userId)) {
             throw new IllegalArgumentException("You can only check products you added");
         }

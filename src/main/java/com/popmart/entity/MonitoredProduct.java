@@ -12,6 +12,9 @@ public class MonitoredProduct {
     @TableField("url")
     private String url;
     
+    @TableField("product_id")
+    private String productId;
+    
     @TableField("product_name")
     private String productName;
     
@@ -67,6 +70,14 @@ public class MonitoredProduct {
     
     public void setUrl(String url) {
         this.url = url;
+    }
+    
+    public String getProductId() {
+        return productId;
+    }
+    
+    public void setProductId(String productId) {
+        this.productId = productId;
     }
     
     public String getProductName() {
@@ -146,6 +157,7 @@ public class MonitoredProduct {
         return "MonitoredProduct{" +
                 "id=" + id +
                 ", url='" + url + '\'' +
+                ", productId='" + productId + '\'' +
                 ", productName='" + productName + '\'' +
                 ", isActive=" + isActive +
                 ", lastKnownStock=" + lastKnownStock +
