@@ -24,8 +24,8 @@ public class StockCheckHistory {
     @TableField("response_time")
     private Integer responseTime; // in milliseconds
     
-    @TableField("stock_changed")
-    private Boolean stockChanged = false;
+    // @TableField("stock_changed")  // 暂时注释掉，数据库表中没有此字段
+    // private Boolean stockChanged = false;
     
     public StockCheckHistory() {
         this.checkedAt = LocalDateTime.now();
@@ -93,13 +93,15 @@ public class StockCheckHistory {
         this.responseTime = responseTime;
     }
     
-    public Boolean getStockChanged() {
-        return stockChanged;
-    }
+    // @TableField("stock_changed")  // 暂时注释掉，数据库表中没有此字段
+    // public Boolean getStockChanged() {
+    //     return stockChanged;
+    // }
     
-    public void setStockChanged(Boolean stockChanged) {
-        this.stockChanged = stockChanged;
-    }
+    // @TableField("stock_changed")  // 暂时注释掉，数据库表中没有此字段
+    // public void setStockChanged(Boolean stockChanged) {
+    //     this.stockChanged = stockChanged;
+    // }
     
     @Override
     public String toString() {
@@ -108,7 +110,7 @@ public class StockCheckHistory {
                 ", productId=" + productId +
                 ", inStock=" + inStock +
                 ", checkedAt=" + checkedAt +
-                ", stockChanged=" + stockChanged +
+                // ", stockChanged=" + stockChanged +
                 '}';
     }
 } 

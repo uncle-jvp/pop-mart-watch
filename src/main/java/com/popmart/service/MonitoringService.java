@@ -289,7 +289,7 @@ public class MonitoringService {
             
             // Check if stock status changed
             boolean stockChanged = !Boolean.valueOf(result.getInStock()).equals(product.getLastKnownStock());
-            history.setStockChanged(stockChanged);
+            // history.setStockChanged(stockChanged);  // 暂时注释掉，数据库表中没有此字段
             
             if (stockChanged) {
                 logger.info("Stock status changed for {}: {} -> {}", 
