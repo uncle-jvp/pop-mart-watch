@@ -1,4 +1,4 @@
-FROM openjdk:8-jre-alpine
+FROM openjdk:17-jre-alpine
 
 # Install Chrome and dependencies
 RUN apk add --no-cache \
