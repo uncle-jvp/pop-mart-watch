@@ -507,7 +507,7 @@ docker-compose up -d
 
 # 等待数据库启动
 log_info "等待数据库启动..."
-MAX_ATTEMPTS=30
+MAX_ATTEMPTS=100
 ATTEMPT=1
 
 while [ $ATTEMPT -le $MAX_ATTEMPTS ]; do
@@ -568,7 +568,7 @@ fi
 
 # 等待应用启动
 log_info "等待应用启动..."
-MAX_ATTEMPTS=60
+MAX_ATTEMPTS=100
 ATTEMPT=1
 
 while [ $ATTEMPT -le $MAX_ATTEMPTS ]; do
